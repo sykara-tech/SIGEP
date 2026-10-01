@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Provas de Bloco (Secretaria)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="topo"></div>
+  <nav class="nav-sec"></nav>
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-header">
+        <h2>Relação de Provas de Bloco</h2>
+        <div class="acoes">
+          <button class="btn btn-secundario" onclick="carregar()">Atualizar</button>
+          <button class="btn btn-secundario" onclick="exportar()">CSV</button>
+        </div>
+      </div>
+      <div class="sub-sec">Aplicações por matéria. Clique em <strong>Ver detalhes</strong> para notas e chamada de presentes que realizaram a prova.</div>
+      <div class="filtros" style="border:none;padding:12px 16px">
+        <div class="filtro-grupo"><label>Bimestre</label>
+          <select id="f_bim" onchange="filtrar()">
+            <option value="">Todos</option>
+            <option value="1">1º</option><option value="2" selected>2º</option>
+            <option value="3">3º</option><option value="4">4º</option>
+          </select>
+        </div>
+        <div class="filtro-grupo"><label>Turma</label><select id="f_turma" onchange="filtrar()"><option value="">Todas</option></select></div>
+        <div class="filtro-grupo"><label>Disciplina</label><select id="f_disc" onchange="filtrar()"><option value="">Todas</option></select></div>
+      </div>
+      <div style="padding:0 16px 16px;overflow-x:auto">
+        <table class="tabela-cad">
+          <thead>
+            <tr>
+              <th>Data prova</th><th>Bim.</th><th>Turma</th><th>Disciplina</th>
+              <th>Presentes</th><th>Ausentes</th><th>Lançado por</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="tb"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" id="detalheCard" style="margin-top:14px;display:none">
+      <div class="card-header">
+        <h2 id="detTitulo">Detalhes</h2>
+        <div class="acoes">
+          <button class="btn btn-secundario" onclick="imprimirDetalhe()">Imprimir</button>
+          <button class="btn btn-secundario" onclick="document.getElementById('detalheCard').style.display='none'">Fechar</button>
+        </div>
+      </div>
+      <div style="padding:12px 16px;overflow-x:auto">
+        <table class="tabela-cad">
+          <thead><tr><th>Nº</th><th>Aluno</th><th>Situação</th><th>Nota Bloco</th></tr></thead>
+          <tbody id="tbDet"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let blocos = {}, turmas = {}, disciplinas = {}, alunos = {};
+    let lista = [];
+    let detalheAtual = null;
+
+    async function carregar() {
+      mostrarCarregando("Carregando provas de bloco...");
+      try {
+        const [b, t, d, a] = await Promise.all([
+          fbGet(PATH.blocos), fbGet(PATH.turmas), fbGet(PATH.disciplinas), fbGet(PATH.alunos)
+        ]);
+        blocos = b || {}; turmas = t || {}; disciplinas = d || {}; alunos = a || {};
+        document.getElementById("f_turma").innerHTML = '<option value="">Todas</option>' +
+          Object.values(turmas).map(x => `<option value="${x.id}">${x.nome}</option>`).join("");
+        document.getElementById("f_disc").innerHTML = '<option value="">Todas</option>' +
+          Object.values(disciplinas).map(x => `<option value="${x.id}">${x.codigo||x.id} — ${x.nome}</option>`).join("");
+        filtrar();
+        toast("Carregado: " + Object.keys(blocos).length + " registro(s).", "sucesso");
+      } catch (e) { toast(e.message, "erro"); }
+      ocultarCarregando();
+    }
+
+    function contagem(v) {
+      const notas = v.notas || {};
+      const pres = v.presenca || {};
+      let presentes = 0, ausentes = 0;
+      // Prefer explicit presence map
+      if (Object.keys(pres).length) {
+        Object.values(pres).forEach(s => { if (s === "P") presentes++; else if (s === "F") ausentes++; });
+      } else {
+        // Fallback: who has a grade = present
+        presentes = Object.keys(notas).filter(id => notas[id] != null).length;
+      }
+      return { presentes, ausentes };
+    }
+
+    function filtrar() {
+      const bim = document.getElementById("f_bim").value;
+      const turma = document.getElementById("f_turma").value;
+      const disc = document.getElementById("f_disc").value;
+      lista = Object.entries(blocos).map(([k, v]) => ({ key: k, ...v })).filter(v => {
+        if (bim && String(v.bimestre) !== String(bim)) return false;
+        if (turma && v.turma !== turma) return false;
+        if (disc && v.disciplinaId !== disc) return false;
+        return true;
+      }).sort((a, b) => String(b.dataAplicada || b.timestamp || "").localeCompare(String(a.dataAplicada || a.timestamp || "")));
+
+      document.getElementById("tb").innerHTML = lista.length ? lista.map((v, i) => {
+        const tn = (turmas[v.turma] || {}).nome || v.turma;
+        const dn = v.disciplina || (disciplinas[v.disciplinaId] || {}).nome || v.disciplinaId;
+        const c = contagem(v);
+        const dataP = v.dataAplicada ? v.dataAplicada.split("-").reverse().join("/") : "—";
+        return `<tr>
+          <td>${dataP}</td>
+          <td>${v.bimestre || "—"}º</td>
+          <td>${tn}</td>
+          <td>${dn}</td>
+          <td><strong style="color:#2e7d32">${c.presentes}</strong></td>
+          <td><strong style="color:#c62828">${c.ausentes || "—"}</strong></td>
+          <td>${v.lancadoPor || "—"}</td>
+          <td><button class="btn btn-secundario btn-sm" onclick="verDetalhe(${i})">Ver detalhes</button></td>
+        </tr>`;
+      }).join("") : "<tr><td colspan='8'>Nenhuma prova de bloco encontrada.</td></tr>";
+    }
+
+    function verDetalhe(i) {
+      const v = lista[i]; if (!v) return;
+      detalheAtual = v;
+      const tn = (turmas[v.turma] || {}).nome || v.turma;
+      const dn = v.disciplina || (disciplinas[v.disciplinaId] || {}).nome || v.disciplinaId;
+      document.getElementById("detTitulo").textContent =
+        `Bloco · ${dn} · ${tn} · ${v.bimestre}º bim · ${v.dataAplicada ? v.dataAplicada.split("-").reverse().join("/") : "—"}`;
+
+      const notas = v.notas || {};
+      const pres = v.presenca || {};
+      // List students of the class
+      const daTurma = Object.values(alunos)
+        .filter(a => a.turma === v.turma && a.status !== "Transferido" && a.homologado !== false)
+        .sort((a,b) => String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+
+      const rows = daTurma.map((a, idx) => {
+        const nota = notas[a.id];
+        let sit = pres[a.id];
+        if (!sit) sit = (nota != null) ? "P" : "—";
+        const sitLabel = sit === "P" ? '<span class="badge-status badge-aberto">Presente</span>'
+          : sit === "F" ? '<span class="badge-status badge-fechado">Ausente</span>' : "—";
+        return `<tr>
+          <td>${idx+1}</td>
+          <td>${a.nome}</td>
+          <td>${sitLabel}</td>
+          <td><strong>${nota != null ? fmtNota(nota) : "—"}</strong></td>
+        </tr>`;
+      }).join("") || "<tr><td colspan='4'>Sem alunos nesta turma.</td></tr>";
+
+      document.getElementById("tbDet").innerHTML = rows;
+      document.getElementById("detalheCard").style.display = "block";
+      document.getElementById("detalheCard").scrollIntoView({ behavior: "smooth" });
+    }
+
+    function imprimirDetalhe() {
+      if (!detalheAtual) return;
+      const v = detalheAtual;
+      const tn = (turmas[v.turma] || {}).nome || v.turma;
+      const dn = v.disciplina || (disciplinas[v.disciplinaId] || {}).nome || v.disciplinaId;
+      const notas = v.notas || {};
+      const pres = v.presenca || {};
+      const daTurma = Object.values(alunos)
+        .filter(a => a.turma === v.turma && a.status !== "Transferido" && a.homologado !== false)
+        .sort((a,b) => String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+      const rows = daTurma.map((a, idx) => {
+        const nota = notas[a.id];
+        let sit = pres[a.id] || (nota != null ? "P" : "—");
+        return `<tr><td>${idx+1}</td><td style="text-align:left">${a.nome}</td><td>${sit==="P"?"Presente":sit==="F"?"Ausente":"—"}</td><td>${nota!=null?fmtNota(nota):"—"}</td></tr>`;
+      }).join("");
+      imprimirComLogo("Prova de Bloco — " + dn, `
+        <p style="font-size:12px;margin:0 0 8px"><strong>Turma:</strong> ${tn} · <strong>Bimestre:</strong> ${v.bimestre}º · <strong>Data:</strong> ${v.dataAplicada?v.dataAplicada.split("-").reverse().join("/"):"—"} · <strong>Por:</strong> ${v.lancadoPor||"—"}</p>
+        <table><thead><tr><th>Nº</th><th>Aluno</th><th>Situação</th><th>Nota</th></tr></thead>
+        <tbody>${rows}</tbody></table>`);
+    }
+
+    function exportar() {
+      exportarCSV("provas_bloco.csv",
+        ["Data prova","Bimestre","Turma","Disciplina","Presentes","Ausentes","Lançado por"],
+        lista.map(v => {
+          const c = contagem(v);
+          return [
+            v.dataAplicada || "",
+            v.bimestre,
+            (turmas[v.turma] || {}).nome || v.turma,
+            v.disciplina || v.disciplinaId,
+            c.presentes, c.ausentes,
+            v.lancadoPor || ""
+          ];
+        }));
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin(["Secretaria", "Gestor", "Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Provas de Bloco", "Secretaria · aplicações e chamada");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      if (typeof aplicarNavSec === "function") aplicarNavSec("sec-blocos.html");
+      carregar();
+    });
+  </script>
+</body>
+</html>

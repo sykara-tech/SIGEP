@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Minha Conta / Senha</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="topo"></div>
+  <main class="conteudo">
+    <div class="card" style="max-width:480px;margin:24px auto">
+      <div class="card-header"><h2>Alterar minha senha</h2></div>
+      <div class="sub-sec">Após alterar, use a nova senha no próximo login.</div>
+      <div class="form-grid" style="grid-template-columns:1fr">
+        <div><label>Usuário</label><input id="c_user" readonly /></div>
+        <div><label>Perfil</label><input id="c_perfil" readonly /></div>
+        <div><label>Senha atual</label><input id="c_atual" type="password" autocomplete="current-password" /></div>
+        <div><label>Nova senha</label><input id="c_nova" type="password" autocomplete="new-password" /></div>
+        <div><label>Confirmar nova senha</label><input id="c_conf" type="password" autocomplete="new-password" /></div>
+      </div>
+      <div style="padding:0 16px 16px;display:flex;gap:10px">
+        <button class="btn btn-sucesso" onclick="salvarSenha()">Salvar nova senha</button>
+        <button class="btn btn-secundario" onclick="location.href='menu.html'">Voltar</button>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin();
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Minha Conta", "Alteração de senha");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      document.getElementById("c_user").value = u.usuario;
+      document.getElementById("c_perfil").value = u.perfil + " · " + u.nome;
+    });
+    async function salvarSenha() {
+      const atual = document.getElementById("c_atual").value;
+      const nova = document.getElementById("c_nova").value;
+      const conf = document.getElementById("c_conf").value;
+      if (!atual || !nova) return toast("Preencha todos os campos.", "erro");
+      if (nova !== conf) return toast("Confirmação não confere.", "erro");
+      try {
+        await trocarMinhaSenha(atual, nova);
+        toast("Senha alterada com sucesso!", "sucesso");
+        document.getElementById("c_atual").value = "";
+        document.getElementById("c_nova").value = "";
+        document.getElementById("c_conf").value = "";
+      } catch (e) {
+        toast(e.message || String(e), "erro");
+      }
+    }
+  </script>
+</body>
+</html>

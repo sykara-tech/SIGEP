@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Prova de Bloco</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .bloco-info { background:#e3f2fd; border-left:4px solid #1565c0; padding:12px 16px; font-size:13px; line-height:1.5; }
+    .bloco-alerta { background:#fff8e1; border-left:4px solid #f9a825; padding:10px 14px; font-size:13px; margin:12px 16px 0; }
+    .bloco-fechado { background:#ffebee; border-left:4px solid #c62828; padding:10px 14px; font-size:13px; margin:12px 16px 0; }
+    .tabela-bloco { width:100%; border-collapse:collapse; font-size:13px; }
+    .tabela-bloco th { background:#1565c0; color:#fff; padding:8px; }
+    .tabela-bloco td { border:1px solid var(--borda); padding:6px 8px; text-align:center; }
+    .tabela-bloco td.nome { text-align:left; font-weight:500; }
+    .tabela-bloco input { width:64px; padding:4px; text-align:center; border:1px solid #c5d0de; border-radius:3px; }
+    .tabela-bloco input:disabled { background:#eee; }
+  
+    .btn-freq {
+      min-width: 36px; height: 32px; border-radius: 4px; border: 2px solid #ccc;
+      font-weight: 800; font-size: 14px; cursor: pointer; background: #fff;
+    }
+    .btn-freq.P { background: #e8f5e9; color: #2e7d32; border-color: #66bb6a; }
+    .btn-freq.F { background: #ffebee; color: #c62828; border-color: #ef5350; }
+    .btn-freq:disabled { opacity: .6; cursor: not-allowed; }
+</style>
+</head>
+<body>
+  <div id="topo"></div>
+  <section class="filtros">
+    <div class="filtro-grupo"><label>Ano</label><input id="b_ano" value="2026" readonly /></div>
+    <div class="filtro-grupo"><label>Turma</label><select id="b_turma" onchange="onFiltro()"></select></div>
+    <div class="filtro-grupo"><label>Disciplina (matéria do bloco)</label><select id="b_disc" onchange="onFiltro()"></select></div>
+    <div class="filtro-grupo"><label>Bimestre</label>
+      <select id="b_bim" onchange="onFiltro()">
+        <option value="1">1º</option><option value="2" selected>2º</option>
+        <option value="3">3º</option><option value="4">4º</option>
+      </select>
+    </div>
+    <div class="filtro-grupo"><label>Data da prova</label><input type="date" id="b_data" /></div>
+    <div class="filtro-grupo"><label>&nbsp;</label><button class="btn btn-primario" onclick="carregar()">Listar alunos</button></div>
+  </section>
+
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-header">
+        <h2>Prova de Bloco por disciplina (40% · 4 pontos)</h2>
+        <button class="btn btn-sucesso" id="btnSalvar" onclick="salvarEPropagar()" disabled>Salvar e enviar ao diário</button>
+      </div>
+      <div class="bloco-info">
+        <strong>Regras:</strong>
+        A Prova de Bloco é <em>por matéria</em> (ex.: só História, só Geografia).
+        Qualquer professor pode abrir esta tela; o lançamento só é permitido quando a
+        <strong>Coordenação libera o alvará de bloco</strong> daquela disciplina/bimestre.
+        Ao salvar, a nota vai <strong>somente</strong> para o diário do professor daquela disciplina na turma selecionada.
+      </div>
+      <div id="msgAlvara"></div>
+      <div style="padding:16px;overflow-x:auto">
+        <table class="tabela-bloco">
+          <thead><tr><th>Nº</th><th>Aluno</th><th>Matrícula</th><th>Presença</th><th>Nota Bloco (0–10)</th></tr></thead>
+          <tbody id="corpoBloco"><tr><td colspan="4" class="loading">Selecione turma e disciplina.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="status-bar">
+        <span id="statusBloco"><span class="dot dot-local"></span>Aguardando</span>
+        <span id="infoUser"></span>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let alunosBloco = [];
+    let cache = {};
+    let podeLancar = false;
+    let user = null;
+
+    async function init() {
+      // Qualquer perfil autenticado pode acessar (professor, coordenação, gestor, secretaria)
+      user = exigirLogin(["Professor", "Coordenacao", "Gestor", "Secretaria"]);
+      if (!user) return;
+
+      document.getElementById("topo").innerHTML = montarTopo("Prova de Bloco", "Lançamento por disciplina");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      document.getElementById("infoUser").textContent = user.nome + " · " + user.perfil;
+      const hoje = new Date();
+      const elData = document.getElementById("b_data");
+      if (elData && !elData.value) {
+        elData.value = hoje.getFullYear() + "-" + String(hoje.getMonth()+1).padStart(2,"0") + "-" + String(hoje.getDate()).padStart(2,"0");
+      }
+
+      try {
+        cache.turmas = (await fbGet(PATH.turmas)) || {};
+        cache.disciplinas = (await fbGet(PATH.disciplinas)) || {};
+        cache.alunos = (await fbGet(PATH.alunos)) || {};
+        cache.vinculos = (await fbGet(PATH.vinculos)) || {};
+        cache.professores = (await fbGet(PATH.professores)) || {};
+      } catch (e) {
+        toast("Erro ao carregar dados: " + e.message, "erro");
+        cache = { turmas: {}, disciplinas: {}, alunos: {}, vinculos: {}, professores: {} };
+      }
+
+      // Prova de Bloco: TODOS os professores veem TODAS as turmas e disciplinas
+      // (podem aplicar bloco em turma de outra materia quando solicitado; visualizam demais)
+      let turmasOpts = Object.values(cache.turmas);
+      let discOpts = Object.values(cache.disciplinas);
+
+      document.getElementById("b_turma").innerHTML =
+        turmasOpts.map(t => `<option value="${t.id}">${t.nome}</option>`).join("") || "<option value=''>Sem turmas</option>";
+      document.getElementById("b_disc").innerHTML =
+        discOpts.map(d => `<option value="${d.id}" data-nome="${d.nome}">${d.codigo || d.id} — ${d.nome}</option>`).join("") || "<option value=''>Sem disciplinas</option>";
+
+      await carregar();
+    }
+
+    async function onFiltro() { await carregar(); }
+
+    async function carregar() {
+      const turma = document.getElementById("b_turma").value;
+      const discId = document.getElementById("b_disc").value;
+      const discNome = document.getElementById("b_disc").selectedOptions[0]?.dataset.nome
+        || document.getElementById("b_disc").selectedOptions[0]?.text || discId;
+      const bim = document.getElementById("b_bim").value;
+      const ano = document.getElementById("b_ano").value;
+      const msg = document.getElementById("msgAlvara");
+      const btn = document.getElementById("btnSalvar");
+
+      if (!turma || !discId) {
+        document.getElementById("corpoBloco").innerHTML = "<tr><td colspan='4'>Selecione turma e disciplina.</td></tr>";
+        btn.disabled = true;
+        return;
+      }
+
+      // Verifica alvará de bloco desta disciplina
+      podeLancar = false;
+      try {
+        podeLancar = await verificarAlvaraBloco(ano, bim, discId);
+      } catch (e) { podeLancar = false; }
+
+      // Coordenação e Gestor sempre podem lançar (liberam e lançam)
+      if (["Coordenacao", "Gestor"].includes(user.perfil)) {
+        podeLancar = true;
+      }
+
+      if (podeLancar) {
+        msg.innerHTML = `<div class="bloco-alerta">Bloco de <strong>${discNome}</strong> liberado para o ${bim} bimestre. Voce pode lancar as notas.</div>`;
+        btn.disabled = false;
+      } else {
+        msg.innerHTML = `<div class="bloco-fechado">Bloco de <strong>${discNome}</strong> ainda <strong>nao liberado</strong> pela Coordenacao para este bimestre. Voce pode consultar notas ja lancadas, mas nao alterar.</div>`;
+        btn.disabled = true;
+      }
+
+      alunosBloco = Object.values(cache.alunos || {})
+        .filter(a => a.turma === turma && a.status !== "Transferido" && a.homologado !== false)
+        .map(a => ({ id: a.id, nome: a.nome, matricula: a.matricula, bloco: null }));
+
+      // Notas já lançadas neste bloco (por disciplina)
+      const blocoKey = `${ano}_${turma}_${slug(discId)}_b${bim}`;
+      try {
+        const prev = await fbGet(PATH.blocos + "/" + blocoKey);
+        if (prev) {
+          if (prev.notas) {
+            alunosBloco.forEach(a => {
+              if (prev.notas[a.id] != null) a.bloco = prev.notas[a.id];
+            });
+          }
+          if (prev.presenca) {
+            alunosBloco.forEach(a => {
+              if (prev.presenca[a.id]) a.presenca = prev.presenca[a.id];
+            });
+          }
+          if (prev.dataAplicada) {
+            const el = document.getElementById("b_data");
+            if (el) el.value = prev.dataAplicada;
+          }
+        }
+      } catch (e) {}
+
+      const tb = document.getElementById("corpoBloco");
+      if (!alunosBloco.length) {
+        tb.innerHTML = "<tr><td colspan='4'>Nenhum aluno homologado nesta turma.</td></tr>";
+        document.getElementById("statusBloco").innerHTML = '<span class="dot dot-local"></span>Sem alunos';
+        return;
+      }
+
+      const dis = podeLancar ? "" : "disabled";
+      tb.innerHTML = alunosBloco.map((a, i) => {
+        if (!a.presenca) a.presenca = (a.bloco != null) ? "P" : "P";
+        return `<tr>
+          <td>${i + 1}</td>
+          <td class="nome">${a.nome}</td>
+          <td>${a.matricula || a.id}</td>
+          <td>
+            <button type="button" class="btn-freq ${a.presenca}" ${dis}
+              onclick="altPresenca(${i}, this)" title="Clique: Presente ↔ Ausente">${a.presenca}</button>
+          </td>
+          <td><input type="number" min="0" max="10" step="0.1" value="${a.bloco ?? ""}" ${dis}
+            onchange="alunosBloco[${i}].bloco = parseNota(this.value)" /></td>
+        </tr>`;
+      }).join("");
+
+      document.getElementById("statusBloco").innerHTML =
+        `<span class="dot ${podeLancar ? "dot-online" : "dot-offline"}"></span>${alunosBloco.length} alunos · ${discNome} · ${bim}º bim`;
+    }
+
+    function altPresenca(i, el) {
+      if (!podeLancar) return;
+      const a = alunosBloco[i];
+      if (!a) return;
+      a.presenca = a.presenca === "P" ? "F" : "P";
+      el.textContent = a.presenca;
+      el.className = "btn-freq " + a.presenca;
+      if (a.presenca === "F") a.bloco = null;
+    }
+
+    async function salvarEPropagar() {
+      if (!podeLancar) {
+        toast("Lançamento bloqueado. Aguarde liberação da Coordenação.", "erro");
+        return;
+      }
+      const turma = document.getElementById("b_turma").value;
+      const discId = document.getElementById("b_disc").value;
+      const discNome = document.getElementById("b_disc").selectedOptions[0]?.dataset.nome
+        || document.getElementById("b_disc").selectedOptions[0]?.text || discId;
+      const bim = document.getElementById("b_bim").value;
+      const ano = document.getElementById("b_ano").value;
+
+      const notas = {};
+      alunosBloco.forEach(a => { if (a.bloco != null) notas[a.id] = a.bloco; });
+      if (!Object.keys(notas).length) {
+        toast("Informe ao menos uma nota.", "erro");
+        return;
+      }
+
+      const blocoKey = `${ano}_${turma}_${slug(discId)}_b${bim}`;
+      const dataAplicada = (document.getElementById("b_data") || {}).value || "";
+      if (!dataAplicada) {
+        toast("Informe a data em que a prova de bloco foi aplicada.", "erro");
+        return;
+      }
+      const presenca = {};
+      alunosBloco.forEach(a => { presenca[a.id] = a.presenca || (a.bloco != null ? "P" : "F"); });
+      const registro = {
+        ano, turma, disciplinaId: discId, disciplina: discNome, bimestre: bim,
+        dataAplicada, notas, presenca,
+        lancadoPor: user.nome, perfil: user.perfil, timestamp: agoraISO()
+      };
+
+      try {
+        // 1) Banco de blocos
+        await fbPut(PATH.blocos + "/" + blocoKey, registro);
+
+        // 2) Propaga SOMENTE para o diário desta disciplina nesta turma
+        const pathDiario = PATH.diario(ano, turma, discId, bim);
+        let diario = null;
+        try { diario = await fbGet(pathDiario + "/diario"); } catch (e) {}
+        if (!diario) {
+          diario = { colunasLivres: ["N1 Caderno", "N2 Atividade"], alunos: {} };
+        }
+        if (!diario.alunos) diario.alunos = {};
+
+        alunosBloco.forEach(a => {
+          if (!diario.alunos[a.id]) {
+            diario.alunos[a.id] = { nome: a.nome, livres: {}, bloco: null, recuperacao: null, faltas: 0 };
+          }
+          if (a.bloco != null) {
+            diario.alunos[a.id].bloco = a.bloco;
+            const al = diario.alunos[a.id];
+            const cols = diario.colunasLivres || [];
+            const mb = mediaBimestral(al, cols);
+            const mf = mediaFinal(al, cols);
+            al.media_bimestral = mb != null ? +mb.toFixed(2) : null;
+            al.media_final = mf != null ? +mf.toFixed(2) : null;
+            al.status = statusMedia(mf).t;
+          }
+        });
+        diario.blocoInjetadoEm = agoraISO();
+        diario.blocoInjetadoPor = user.nome;
+        diario.blocoDisciplina = discNome;
+
+        await fbPut(pathDiario + "/diario", diario);
+        await registrarHistorico("bloco",
+          `Bloco ${discNome} · turma ${turma} · bim ${bim} · data ${dataAplicada}`,
+          { qtd: Object.keys(notas).length, turma, discId, bim, dataAplicada });
+
+        toast(`Notas de Bloco (${discNome}) salvas e enviadas ao diário do professor desta matéria.`, "sucesso");
+        document.getElementById("statusBloco").innerHTML =
+          '<span class="dot dot-online"></span>Propagado ao diário de ' + discNome;
+      } catch (e) {
+        toast("Erro ao salvar: " + e.message, "erro");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>

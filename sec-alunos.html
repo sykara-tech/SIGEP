@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Cadastro de Alunos</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="topo"></div>
+  <nav class="nav-sec">
+    <a href="secretaria.html">Hub</a>
+    <a href="sec-turmas.html">Turmas</a>
+    <a href="sec-alunos.html" class="ativa">Alunos</a>
+    <a href="sec-professores.html">Professores</a>
+    <a href="sec-disciplinas.html">Disciplinas</a>
+    <a href="sec-vinculos.html">Vínculos</a>
+    <a href="sec-movimentacao.html">Movimentação</a>
+    <a href="sec-alvaras.html">Alvarás</a>
+    <a href="sec-historico.html">Histórico</a>
+  </nav>
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-header">
+        <h2>Cadastro de Alunos</h2>
+        <div class="acoes">
+          <button class="btn btn-secundario" onclick="atualizar()">Atualizar dados</button>
+          <button class="btn btn-aviso" onclick="renumerarChamada()">Nº chamada (A-Z)</button>
+          <button class="btn btn-secundario" onclick="exportar()">Exportar planilha</button>
+          <button class="btn btn-sucesso" onclick="abrirNovo()">Novo aluno</button>
+        </div>
+      </div>
+      <div class="busca-box">
+        <input type="search" id="busca" placeholder="Pesquisar por nome, matrícula ou turma..." oninput="filtrar()" />
+      </div>
+      <div class="sub-sec">Clique no <strong>nome</strong> do estudante para visualizar a matrícula, homologar, transferir, desativar ou editar dados.</div>
+      <div style="padding:0 16px 16px;overflow-x:auto">
+        <table class="tabela-cad">
+          <thead>
+            <tr>
+              <th>Nº</th><th>Matrícula</th><th>Nome</th><th>Turma</th>
+              <th>Situação</th><th>Homologado</th><th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tb"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <div class="modal-aluno-bg" id="modalAluno">
+    <div class="modal-aluno">
+      <header>
+        <h3 id="modalTitulo">Ficha do estudante</h3>
+        <button type="button" onclick="fecharModal()" aria-label="Fechar">&times;</button>
+      </header>
+      <div class="corpo">
+        <input type="hidden" id="f_id" />
+        <div class="form-grid" style="padding:0">
+          <div class="campo"><label>Matrícula</label><input id="f_mat" readonly /></div>
+          <div class="campo"><label>Nº chamada</label><input id="f_cham" type="number" min="1" /></div>
+          <div class="campo" style="grid-column:1/-1"><label>Nome completo</label><input id="f_nome" /></div>
+          <div class="campo"><label>Sexo</label>
+            <select id="f_sexo"><option>Masculino</option><option>Feminino</option></select>
+          </div>
+          <div class="campo"><label>Turma</label><select id="f_turma"></select></div>
+          <div class="campo"><label>Situação</label>
+            <select id="f_status">
+              <option>Normal</option><option>Pendente</option>
+              <option>Transferido</option><option>Remanejado</option>
+              <option>Desativado</option>
+            </select>
+          </div>
+          <div class="campo"><label>CEP</label>
+            <div style="display:flex;gap:6px">
+              <input id="f_cep" placeholder="00000-000" />
+              <button type="button" class="btn btn-secundario btn-sm" onclick="preencherCep()">Buscar</button>
+            </div>
+          </div>
+          <div class="campo"><label>Logradouro</label><input id="f_log" /></div>
+          <div class="campo"><label>Bairro</label><input id="f_bairro" /></div>
+          <div class="campo"><label>Cidade</label><input id="f_cidade" /></div>
+          <div class="campo"><label>UF</label><input id="f_uf" maxlength="2" /></div>
+          <div class="campo" style="grid-column:1/-1">
+            <label>Nome do pai</label>
+            <input id="f_pai" />
+            <label class="check-row"><input type="checkbox" id="f_pai_ni" onchange="toggleNi('pai')" /> Não informado</label>
+          </div>
+          <div class="campo" style="grid-column:1/-1">
+            <label>Nome da mãe</label>
+            <input id="f_mae" />
+            <label class="check-row"><input type="checkbox" id="f_mae_ni" onchange="toggleNi('mae')" /> Não informado</label>
+          </div>
+        </div>
+      </div>
+      <div class="acoes-modal">
+        <button class="btn btn-sucesso" onclick="salvarFicha()">Salvar alterações</button>
+        <button class="btn btn-primario" onclick="homologarFicha()">Homologar matrícula</button>
+        <button class="btn btn-aviso" onclick="acaoStatus('Transferido')">Transferir (sair da escola)</button>
+        <button class="btn btn-aviso" onclick="acaoStatus('Desativado')">Desativar</button>
+        <button class="btn btn-secundario" onclick="fecharModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let alunos = {}, turmas = {}, listaFiltrada = [];
+
+    async function atualizar() {
+      mostrarCarregando("Atualizando cadastro de alunos...");
+      try {
+        alunos = (await fbGet(PATH.alunos)) || {};
+        turmas = (await fbGet(PATH.turmas)) || {};
+        document.getElementById("f_turma").innerHTML =
+          Object.values(turmas).map(t => `<option value="${t.id}">${t.nome}</option>`).join("") || "<option>—</option>";
+        filtrar();
+        toast("Dados atualizados.", "sucesso");
+      } catch (e) {
+        toast("Não foi possível atualizar: " + e.message, "erro");
+      }
+      ocultarCarregando();
+    }
+
+    function filtrar() {
+      const q = (document.getElementById("busca").value || "").toLowerCase().trim();
+      listaFiltrada = Object.values(alunos).filter(a => {
+        if (!q) return true;
+        return [a.nome, a.matricula, a.turma, a.status].join(" ").toLowerCase().includes(q);
+      }).sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+      render();
+    }
+
+    function render() {
+      const tb = document.getElementById("tb");
+      tb.innerHTML = listaFiltrada.length ? listaFiltrada.map((a, i) => `
+        <tr>
+          <td>${a.nCham || i + 1}</td>
+          <td>${a.matricula || a.id}</td>
+          <td><button type="button" class="link-aluno" onclick="abrirFicha('${a.id}')">${a.nome}</button></td>
+          <td>${(turmas[a.turma] || {}).nome || a.turma || "—"}</td>
+          <td><span class="badge-status ${a.status === "Normal" ? "badge-normal" : a.status === "Pendente" ? "badge-pendente" : "badge-transf"}">${a.status || "—"}</span></td>
+          <td>${a.homologado ? "Sim" : "Não"}</td>
+          <td>
+            <div class="dropdown-acoes" id="dd_${a.id}">
+              <button type="button" class="btn btn-secundario btn-sm" onclick="toggleAcoes('${a.id}')">Ações ▾</button>
+              <div class="menu-acoes">
+                <button type="button" onclick="abrirFicha('${a.id}')">Atualizar cadastro</button>
+                <button type="button" onclick="abrirFicha('${a.id}')">Movimentação / situação</button>
+                <button type="button" onclick="imprimirMatricula('${a.id}')">Imprimir matrícula</button>
+                <button type="button" onclick="comprovanteFreq('${a.id}')">Comprovante de frequência</button>
+              </div>
+            </div>
+          </td>
+        </tr>`).join("") : "<tr><td colspan='6'>Nenhum estudante encontrado.</td></tr>";
+    }
+
+    function abrirFicha(id) {
+      const a = alunos[id];
+      if (!a) return;
+      document.getElementById("f_id").value = id;
+      document.getElementById("f_mat").value = a.matricula || "";
+      document.getElementById("f_cham").value = a.nCham || "";
+      document.getElementById("f_nome").value = a.nome || "";
+      document.getElementById("f_sexo").value = a.sexo || "Masculino";
+      document.getElementById("f_turma").value = a.turma || "";
+      document.getElementById("f_status").value = a.status || "Normal";
+      document.getElementById("f_cep").value = a.cep || "";
+      document.getElementById("f_log").value = a.logradouro || "";
+      document.getElementById("f_bairro").value = a.bairro || "";
+      document.getElementById("f_cidade").value = a.cidade || "";
+      document.getElementById("f_uf").value = a.uf || "";
+      document.getElementById("f_pai").value = a.pai || "";
+      document.getElementById("f_mae").value = a.mae || "";
+      document.getElementById("f_pai_ni").checked = !!a.paiNaoInformado;
+      document.getElementById("f_mae_ni").checked = !!a.maeNaoInformado;
+      toggleNi("pai"); toggleNi("mae");
+      document.getElementById("modalTitulo").textContent = a.nome;
+      document.getElementById("modalAluno").classList.add("aberto");
+    }
+
+    function fecharModal() {
+      document.getElementById("modalAluno").classList.remove("aberto");
+    }
+
+    function toggleNi(tipo) {
+      const cb = document.getElementById("f_" + tipo + "_ni");
+      const inp = document.getElementById("f_" + tipo);
+      if (cb.checked) { inp.value = "NÃO INFORMADO"; inp.disabled = true; }
+      else { if (inp.value === "NÃO INFORMADO") inp.value = ""; inp.disabled = false; }
+    }
+
+    async function preencherCep() {
+      try {
+        mostrarCarregando("Consultando CEP...");
+        const end = await buscarCep(document.getElementById("f_cep").value);
+        document.getElementById("f_log").value = end.logradouro;
+        document.getElementById("f_bairro").value = end.bairro;
+        document.getElementById("f_cidade").value = end.cidade;
+        document.getElementById("f_uf").value = end.uf;
+        document.getElementById("f_cep").value = end.cep;
+        toast("Endereço preenchido automaticamente.", "sucesso");
+      } catch (e) {
+        toast(e.message || "CEP não localizado.", "erro");
+      }
+      ocultarCarregando();
+    }
+
+    function coletarFicha() {
+      const id = document.getElementById("f_id").value;
+      const prev = alunos[id] || {};
+      return {
+        ...prev,
+        id,
+        matricula: document.getElementById("f_mat").value,
+        nCham: parseInt(document.getElementById("f_cham").value) || 0,
+        nome: document.getElementById("f_nome").value.trim().toUpperCase(),
+        sexo: document.getElementById("f_sexo").value,
+        turma: document.getElementById("f_turma").value,
+        status: document.getElementById("f_status").value,
+        cep: document.getElementById("f_cep").value,
+        logradouro: document.getElementById("f_log").value,
+        bairro: document.getElementById("f_bairro").value,
+        cidade: document.getElementById("f_cidade").value,
+        uf: document.getElementById("f_uf").value,
+        pai: document.getElementById("f_pai").value,
+        mae: document.getElementById("f_mae").value,
+        paiNaoInformado: document.getElementById("f_pai_ni").checked,
+        maeNaoInformado: document.getElementById("f_mae_ni").checked,
+        homologado: document.getElementById("f_status").value === "Normal" ? true : (prev.homologado || false),
+        ano: parseInt(ANO_LETIVO)
+      };
+    }
+
+    async function salvarFicha() {
+      const obj = coletarFicha();
+      if (!obj.nome) return toast("Informe o nome do estudante.", "erro");
+      mostrarCarregando("Gravando ficha...");
+      try {
+        await fbPut(PATH.alunos + "/" + obj.id, obj);
+        alunos[obj.id] = obj;
+        await registrarHistorico("aluno", "Atualização cadastral: " + obj.nome, { id: obj.id });
+        toast("Ficha atualizada com sucesso.", "sucesso");
+        filtrar();
+        fecharModal();
+      } catch (e) { toast("Falha ao gravar: " + e.message, "erro"); }
+      ocultarCarregando();
+    }
+
+    async function homologarFicha() {
+      document.getElementById("f_status").value = "Normal";
+      const obj = coletarFicha();
+      obj.homologado = true;
+      obj.status = "Normal";
+      mostrarCarregando("Homologando matrícula...");
+      try {
+        await fbPut(PATH.alunos + "/" + obj.id, obj);
+        alunos[obj.id] = obj;
+        await registrarHistorico("homologacao", "Homologação: " + obj.nome, { id: obj.id });
+        toast("Matrícula homologada.", "sucesso");
+        filtrar();
+        fecharModal();
+      } catch (e) { toast(e.message, "erro"); }
+      ocultarCarregando();
+    }
+
+    async function acaoStatus(st) {
+      document.getElementById("f_status").value = st;
+      if (st === "Transferido" || st === "Desativado") {
+        const obj = coletarFicha();
+        obj.status = st;
+        if (st === "Desativado") obj.homologado = false;
+        mostrarCarregando("Registrando movimentação...");
+        try {
+          await fbPut(PATH.alunos + "/" + obj.id, obj);
+          alunos[obj.id] = obj;
+          await registrarHistorico("movimentacao", st + ": " + obj.nome, { id: obj.id });
+          toast("Situação atualizada: " + st, "sucesso");
+          filtrar();
+          fecharModal();
+        } catch (e) { toast(e.message, "erro"); }
+        ocultarCarregando();
+      }
+    }
+
+    async function abrirNovo() {
+      mostrarCarregando("Gerando matrícula...");
+      const mat = await gerarMatricula();
+      ocultarCarregando();
+      const id = "a_" + mat;
+      // próximo nº chamada na primeira turma
+      const turmaId = Object.keys(turmas)[0] || "";
+      const naTurma = Object.values(alunos).filter(a => a.turma === turmaId);
+      const nCham = naTurma.length + 1;
+      alunos[id] = {
+        id, matricula: mat, nome: "NOVO ALUNO", turma: turmaId, status: "Pendente",
+        homologado: false, nCham, sexo: "Masculino", ano: parseInt(ANO_LETIVO)
+      };
+      abrirFicha(id);
+      document.getElementById("f_nome").value = "";
+      document.getElementById("f_nome").focus();
+      toast("Matrícula gerada automaticamente: " + mat, "info");
+    }
+
+    function toggleAcoes(id) {
+      document.querySelectorAll(".dropdown-acoes").forEach(d => { if (d.id !== "dd_"+id) d.classList.remove("aberto"); });
+      document.getElementById("dd_"+id)?.classList.toggle("aberto");
+    }
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".dropdown-acoes")) document.querySelectorAll(".dropdown-acoes").forEach(d => d.classList.remove("aberto"));
+    });
+    function imprimirMatricula(id) {
+      const a = alunos[id]; if (!a) return;
+      const w = window.open("", "_blank");
+      w.document.write(`<!DOCTYPE html><html><head><title>Matrícula</title>
+        <style>body{font-family:Arial;padding:24px} .cab{display:flex;align-items:center;gap:12px;border-bottom:2px solid #1a5f9e;padding-bottom:10px;margin-bottom:16px}
+        img{height:48px} h1{font-size:16px;margin:0;color:#0d3a66} table{width:100%;border-collapse:collapse;margin-top:12px}
+        td{border:1px solid #333;padding:8px;font-size:13px} .r{text-align:right;margin-top:24px;font-size:12px}</style></head><body>
+        <div class="cab"><img src="${LOGO_GO}" /><div><h1>ESTADO DE GOIÁS — SECRETARIA DE ESTADO DA EDUCAÇÃO</h1>
+        <div>Comprovante de Matrícula — Ano ${ANO_LETIVO}</div></div></div>
+        <table>
+          <tr><td><b>Matrícula</b></td><td>${a.matricula||""}</td></tr>
+          <tr><td><b>Nome</b></td><td>${a.nome||""}</td></tr>
+          <tr><td><b>Turma</b></td><td>${(turmas[a.turma]||{}).nome||a.turma||""}</td></tr>
+          <tr><td><b>Situação</b></td><td>${a.status||""}</td></tr>
+          <tr><td><b>Homologado</b></td><td>${a.homologado?"Sim":"Não"}</td></tr>
+        </table>
+        <div class="r">Emitido em ${new Date().toLocaleString("pt-BR")} · SIGEP</div>
+        <script>window.print()<\/script></body></html>`);
+      w.document.close();
+    }
+    function comprovanteFreq(id) {
+      toast("Utilize o módulo Frequência Escolar (gestão) ou o diário da disciplina para extrair o histórico detalhado.", "info");
+      abrirFicha(id);
+    }
+    async function renumerarChamada() {
+      if (!confirm("Renumerar o nº de chamada de TODAS as turmas em ordem alfabética (A-Z) pelo nome?")) return;
+      mostrarCarregando("Renumerando...");
+      try {
+        const porTurma = {};
+        Object.values(alunos).forEach(a => {
+          if (a.status === "Transferido" || a.status === "Desativado") return;
+          const t = a.turma || "_";
+          if (!porTurma[t]) porTurma[t] = [];
+          porTurma[t].push(a);
+        });
+        Object.keys(porTurma).forEach(t => {
+          porTurma[t].sort((x, y) => String(x.nome || "").localeCompare(String(y.nome || ""), "pt-BR", { sensitivity: "base" }));
+          porTurma[t].forEach((a, i) => { a.nCham = i + 1; });
+        });
+        await fbPut(PATH.alunos, alunos);
+        toast("Números de chamada atualizados por ordem alfabética em cada turma.", "sucesso");
+        filtrar();
+      } catch (e) { toast(e.message, "erro"); }
+      ocultarCarregando();
+    }
+
+    function exportar() {
+      exportarCSV("alunos_" + ANO_LETIVO + ".csv",
+        ["Matrícula","Nº","Nome","Turma","Situação","Homologado","Pai","Mãe","Cidade"],
+        listaFiltrada.map(a => [a.matricula, a.nCham, a.nome, a.turma, a.status, a.homologado?"Sim":"Não", a.pai, a.mae, a.cidade]));
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin(["Secretaria", "Gestor", "Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Cadastro de Alunos", "Secretaria Escolar");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      if (typeof aplicarNavSec === "function") aplicarNavSec("sec-alunos.html");
+      atualizar();
+    });
+  </script>
+</body>
+</html>

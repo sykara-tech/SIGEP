@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Liberação de Diários e Blocos</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .alv-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; padding:16px; }
+    .alv-bim {
+      border:1px solid var(--borda); border-radius:10px; padding:14px; background:#f8fafc;
+      display:flex; flex-direction:column; gap:8px;
+    }
+    .alv-bim h4 { margin:0; color:var(--azul-escuro); font-size:15px; }
+    .alv-bim .meta { font-size:11px; color:#666; line-height:1.4; }
+    .alv-bim .acoes-bim { display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
+    .bloco-chip-grid { display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px 16px; }
+    .bloco-chip {
+      display:flex; align-items:center; gap:8px; padding:8px 12px;
+      border:1px solid var(--borda); border-radius:8px; background:#fff; font-size:13px;
+      min-width:180px;
+    }
+    .bloco-chip.open { border-color:#66bb6a; background:#f1f8f1; }
+    .bloco-chip.closed { border-color:#ef9a9a; background:#fff8f8; }
+    .bloco-chip strong { color:var(--azul-escuro); }
+    .bloco-chip .st { font-size:10px; font-weight:700; text-transform:uppercase; }
+    .sec-tabs { display:flex; gap:0; border-bottom:2px solid var(--borda); padding:0 16px; background:#fff; }
+    .sec-tab { padding:12px 18px; cursor:pointer; font-weight:600; color:#666; border-bottom:3px solid transparent; }
+    .sec-tab.ativa { color:var(--azul-siap); border-bottom-color:var(--azul-siap); background:var(--azul-claro); }
+  </style>
+</head>
+<body>
+  <div id="topo"></div>
+  <nav class="nav-sec"></nav>
+  <main class="conteudo">
+    <div class="card">
+      <div class="sec-tabs">
+        <div class="sec-tab ativa" data-tab="diario" onclick="trocarTab(this)">Diário (avaliações livres)</div>
+        <div class="sec-tab" data-tab="bloco" onclick="trocarTab(this)">Prova de Bloco</div>
+        <div class="sec-tab" data-tab="periodo" onclick="trocarTab(this)">Período automático</div>
+      </div>
+
+      <div id="painel-diario" class="painel-alv">
+        <div class="sub-sec">Aberto = professor lança métodos e notas livres. Fechado = só consulta.</div>
+        <div class="alv-grid" id="gridDiario"></div>
+      </div>
+
+      <div id="painel-bloco" class="painel-alv" style="display:none">
+        <div class="sub-sec">Libere o bloco <strong>por matéria</strong>. Só disciplinas com alvará aberto podem receber notas de bloco.</div>
+        <div class="form-grid" style="padding-bottom:0">
+          <div><label>Bimestre</label>
+            <select id="ab_bim"><option value="1">1º</option><option value="2" selected>2º</option><option value="3">3º</option><option value="4">4º</option></select>
+          </div>
+          <div><label>Disciplina</label><select id="ab_disc"></select></div>
+          <div><label>&nbsp;</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-sucesso" onclick="setBloco(true)">Liberar</button>
+              <button class="btn btn-aviso" onclick="setBloco(false)">Fechar</button>
+            </div>
+          </div>
+        </div>
+        <div class="bloco-chip-grid" id="chipsBloco"></div>
+      </div>
+
+      <div id="painel-periodo" class="painel-alv" style="display:none">
+        <div class="sub-sec">Defina o intervalo em que o diário do bimestre fica automaticamente aberto. Fora do intervalo, permanece fechado (ainda é possível abrir/fechar manualmente).</div>
+        <div class="form-grid">
+          <div><label>Bimestre</label>
+            <select id="per_bim"><option value="1">1º</option><option value="2" selected>2º</option><option value="3">3º</option><option value="4">4º</option></select>
+          </div>
+          <div><label>De</label><input type="date" id="per_de" /></div>
+          <div><label>Até</label><input type="date" id="per_ate" /></div>
+          <div><label>&nbsp;</label><button class="btn btn-sucesso" onclick="salvarPeriodo()">Salvar período</button></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let alvaras = {}, alvarasBloco = {}, disciplinas = {};
+
+    function trocarTab(el) {
+      document.querySelectorAll(".sec-tab").forEach(t => t.classList.remove("ativa"));
+      el.classList.add("ativa");
+      const tab = el.dataset.tab;
+      document.querySelectorAll(".painel-alv").forEach(p => p.style.display = "none");
+      document.getElementById("painel-" + tab).style.display = "block";
+    }
+
+    async function load() {
+      try {
+        alvaras = (await fbGet(PATH.alvaras)) || {};
+        alvarasBloco = (await fbGet(PATH.alvarasBloco)) || {};
+        disciplinas = (await fbGet(PATH.disciplinas)) || {};
+      } catch (e) { toast(e.message, "erro"); }
+
+      for (let b = 1; b <= 4; b++) {
+        const k = "2026_" + b;
+        if (!alvaras[k]) alvaras[k] = { ano: 2026, bimestre: b, aberto: false };
+      }
+
+      document.getElementById("ab_disc").innerHTML =
+        Object.values(disciplinas).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'))
+          .map(d => `<option value="${d.id}">${d.codigo || d.id} — ${d.nome}</option>`).join("")
+        || "<option value=''>Cadastre disciplinas</option>";
+
+      renderDiario();
+      renderBloco();
+    }
+
+    function fmtDataBR(s) {
+      if (!s) return "—";
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10).split("-").reverse().join("/");
+      try { return new Date(s).toLocaleDateString("pt-BR"); } catch { return s; }
+    }
+
+    function renderDiario() {
+      const grid = document.getElementById("gridDiario");
+      grid.innerHTML = Object.entries(alvaras)
+        .sort((a,b)=>a[1].bimestre-b[1].bimestre)
+        .map(([k, a]) => {
+          const per = (a.periodoDe || a.periodoAte)
+            ? `<div class="meta">Período: ${fmtDataBR(a.periodoDe)} → ${fmtDataBR(a.periodoAte)}</div>` : "";
+          const st = a.aberto
+            ? '<span class="badge-status badge-aberto">ABERTO</span>'
+            : '<span class="badge-status badge-fechado">FECHADO</span>';
+          return `<div class="alv-bim">
+            <h4>${a.bimestre}º Bimestre ${st}</h4>
+            <div class="meta">${a.abertoEm ? "Desde " + new Date(a.abertoEm).toLocaleString("pt-BR") : "Ainda não aberto"}</div>
+            <div class="meta">Por: ${a.por || "—"}</div>
+            ${per}
+            <div class="acoes-bim">
+              ${a.aberto
+                ? `<button class="btn btn-aviso btn-sm" onclick="toggleDiario('${k}',false)">Fechar</button>`
+                : `<button class="btn btn-sucesso btn-sm" onclick="toggleDiario('${k}',true)">Abrir</button>`}
+            </div>
+          </div>`;
+        }).join("");
+    }
+
+    function renderBloco() {
+      const rows = Object.entries(alvarasBloco).map(([k, a]) => {
+        const dn = (disciplinas[a.disciplinaId] || {}).nome || a.disciplinaId;
+        return { k, ...a, dn };
+      }).sort((a,b) => a.bimestre - b.bimestre || String(a.dn).localeCompare(b.dn));
+
+      document.getElementById("chipsBloco").innerHTML = rows.length ? rows.map(a => `
+        <div class="bloco-chip ${a.aberto ? "open" : "closed"}">
+          <div>
+            <strong>${a.dn}</strong>
+            <div style="font-size:11px;color:#666">${a.bimestre}º bim · ${a.por || "—"}</div>
+            <span class="st" style="color:${a.aberto ? "#2e7d32" : "#c62828"}">${a.aberto ? "Aberto" : "Fechado"}</span>
+          </div>
+          <div style="margin-left:auto">
+            ${a.aberto
+              ? `<button class="btn btn-aviso btn-sm" onclick="toggleBlocoKey('${a.k}',false)">Fechar</button>`
+              : `<button class="btn btn-sucesso btn-sm" onclick="toggleBlocoKey('${a.k}',true)">Abrir</button>`}
+          </div>
+        </div>`).join("") : "<p style='padding:8px 16px;color:#888'>Nenhum alvará de bloco ainda. Use Liberar acima.</p>";
+    }
+
+    async function toggleDiario(key, abrir) {
+      const u = getUser();
+      const a = alvaras[key] || {};
+      a.aberto = abrir; a.por = u?.nome; a.porPeriodo = false;
+      if (abrir) a.abertoEm = agoraISO(); else a.fechadoEm = agoraISO();
+      alvaras[key] = a;
+      try {
+        await fbPut(PATH.alvaras + "/" + key, a);
+        await registrarHistorico("alvara", (abrir ? "Abriu" : "Fechou") + " diário bim " + a.bimestre, a);
+        toast("Diário " + (abrir ? "liberado" : "fechado"), "sucesso");
+      } catch (e) { toast(e.message, "erro"); }
+      renderDiario();
+    }
+
+    async function setBloco(abrir) {
+      const bim = document.getElementById("ab_bim").value;
+      const discId = document.getElementById("ab_disc").value;
+      if (!discId) return toast("Selecione a disciplina", "erro");
+      const key = `2026_${bim}_${discId}`;
+      const u = getUser();
+      const a = {
+        ano: 2026, bimestre: parseInt(bim), disciplinaId: discId,
+        aberto: abrir, por: u?.nome,
+        abertoEm: abrir ? agoraISO() : null,
+        fechadoEm: abrir ? null : agoraISO()
+      };
+      alvarasBloco[key] = a;
+      try {
+        await fbPut(PATH.alvarasBloco + "/" + key, a);
+        const dn = (disciplinas[discId] || {}).nome || discId;
+        await registrarHistorico("alvara_bloco", (abrir ? "Liberou" : "Fechou") + " bloco " + dn + " bim " + bim, a);
+        toast("Bloco de " + dn + " " + (abrir ? "LIBERADO" : "fechado"), "sucesso");
+      } catch (e) { toast(e.message, "erro"); }
+      renderBloco();
+    }
+
+    async function toggleBlocoKey(key, abrir) {
+      const a = alvarasBloco[key] || {};
+      a.aberto = abrir; a.por = getUser()?.nome;
+      if (abrir) a.abertoEm = agoraISO(); else a.fechadoEm = agoraISO();
+      alvarasBloco[key] = a;
+      try {
+        await fbPut(PATH.alvarasBloco + "/" + key, a);
+        toast(abrir ? "Aberto" : "Fechado", "sucesso");
+      } catch (e) { toast(e.message, "erro"); }
+      renderBloco();
+    }
+
+    async function salvarPeriodo() {
+      const bim = document.getElementById("per_bim").value;
+      const de = document.getElementById("per_de").value;
+      const ate = document.getElementById("per_ate").value;
+      if (!de || !ate) return toast("Informe data início e fim.", "erro");
+      if (ate < de) return toast("Data fim deve ser ≥ data início.", "erro");
+      const key = "2026_" + bim;
+      const u = getUser();
+      const a = alvaras[key] || { ano: 2026, bimestre: parseInt(bim) };
+      a.periodoDe = de; a.periodoAte = ate;
+      const hoje = new Date().toISOString().slice(0,10);
+      a.aberto = (hoje >= de && hoje <= ate);
+      a.porPeriodo = true; a.por = u?.nome;
+      if (a.aberto) a.abertoEm = agoraISO();
+      alvaras[key] = a;
+      try {
+        await fbPut(PATH.alvaras + "/" + key, a);
+        await registrarHistorico("alvara_periodo", "Período diário bim " + bim + ": " + de + " a " + ate, a);
+        toast(a.aberto ? "Período salvo — diário ABERTO hoje." : "Período salvo — diário fechado (fora do intervalo).", "sucesso");
+      } catch (e) { toast(e.message, "erro"); }
+      renderDiario();
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin(["Secretaria", "Gestor", "Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Liberação de Diários e Blocos", "Coordenação / Secretaria");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      if (typeof aplicarNavSec === "function") aplicarNavSec("sec-alvaras.html");
+      load();
+    });
+  </script>
+</body>
+</html>

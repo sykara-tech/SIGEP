@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Professores</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .rel-box{background:#f7f9fc;border:1px solid #e3e8ef;border-radius:12px;padding:14px;margin-top:10px}
+    .rel-grid{display:grid;grid-template-columns:minmax(220px,1fr) minmax(280px,1.5fr);gap:14px;align-items:start}
+    .turma-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:7px;max-height:210px;overflow:auto;padding:8px;background:#fff;border:1px solid #e3e8ef;border-radius:9px}
+    .turma-item{display:flex;align-items:center;gap:7px;padding:7px 8px;border-radius:7px;background:#f8fafc}
+    .rel-table-wrap{overflow-x:auto;margin-top:12px}
+    .pill{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:#eef4ff;color:#24558a;font-size:12px;font-weight:700;margin:2px}
+    .editing-bar{display:none;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:#fff7df;border:1px solid #f1d58a;border-radius:9px;margin-bottom:12px}
+    .muted{color:#687385;font-size:12px}
+    @media(max-width:760px){.rel-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="topo"></div>
+  <nav class="nav-sec">
+    <a href="secretaria.html">Hub</a><a href="sec-turmas.html">Turmas</a>
+    <a href="sec-alunos.html">Alunos</a><a href="sec-professores.html" class="ativa">Professores</a><a href="sec-disciplinas.html">Disciplinas</a>
+    <a href="sec-vinculos.html">Vínculos</a><a href="sec-movimentacao.html">Movimentação</a>
+    <a href="sec-alvaras.html">Alvarás</a><a href="sec-antigas.html">Antigas</a><a href="sec-historico.html">Histórico</a>
+  </nav>
+
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-header">
+        <h2>Cadastro de Professores — acesso ao SIGEP</h2>
+        <div class="acoes">
+          <button class="btn btn-secundario" onclick="exportar()">CSV</button>
+          <button class="btn btn-aviso" id="btnCancelar" onclick="cancelarEdicao()" style="display:none">Cancelar</button>
+          <button class="btn btn-sucesso" onclick="salvar()">Salvar Professor</button>
+        </div>
+      </div>
+
+      <div class="sub-sec">
+        Cadastre o professor e defina <strong>exatamente quais disciplinas ele ministra em cada turma</strong>.
+        A relação agora é feita por <strong>turma + disciplina</strong>; portanto, Física na 2º A não será automaticamente liberada na 2º B.
+      </div>
+
+      <div id="editingBar" class="editing-bar">
+        <strong id="editingText">Editando professor</strong>
+        <span class="muted">Altere os dados e as relações e clique em “Salvar Professor”.</span>
+      </div>
+
+      <div class="form-grid">
+        <div><label>Nome completo</label><input id="p_nome" /></div>
+        <div><label>CPF</label><input id="p_cpf" placeholder="000.000.000-00" /></div>
+        <div><label>Login (usuário SIGEP)</label><input id="p_user" placeholder="ex: joana.silva" /></div>
+        <div><label>Senha inicial (padrão)</label><input id="p_senha" type="text" value="123456" readonly /></div>
+      </div>
+
+      <div style="padding:0 16px 8px">
+        <label style="font-size:11px;font-weight:700;color:#555">Relações de aula</label>
+        <div class="rel-box">
+          <div class="rel-grid">
+            <div>
+              <label>Disciplina</label>
+              <select id="r_disciplina"></select>
+            </div>
+            <div>
+              <label>Turmas que terão esta disciplina com o professor</label>
+              <div id="r_turmas" class="turma-list"></div>
+              <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+                <button type="button" class="btn btn-secundario btn-sm" onclick="marcarTodasTurmas()">Selecionar todas</button>
+                <button type="button" class="btn btn-secundario btn-sm" onclick="limparTurmas()">Limpar</button>
+                <button type="button" class="btn btn-sucesso btn-sm" id="btnAdicionarRelacao" onclick="adicionarRelacao()">Adicionar relação</button>
+              </div>
+            </div>
+          </div>
+          <div class="rel-table-wrap">
+            <table class="tabela-cad">
+              <thead><tr><th>Disciplina</th><th>Turma</th><th>Ação</th></tr></thead>
+              <tbody id="relacoesBody"></tbody>
+            </table>
+          </div>
+          <div class="muted" style="margin-top:8px">Exemplo: Física → somente 2º A. Para 2º B, adicione outra relação somente se o professor realmente lecionar Física nessa turma.</div>
+        </div>
+      </div>
+
+      <div style="padding:12px 16px 16px;overflow-x:auto">
+        <table class="tabela-cad">
+          <thead><tr><th>Nome</th><th>Login</th><th>Disciplinas</th><th>Turmas</th><th>Relações</th><th>Ativo</th><th>Ações</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let cache = { professores: {}, disciplinas: {}, turmas: {}, vinculos: {} };
+    let editId = null;
+    let relacoes = [];
+
+    const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    async function load() {
+      try {
+        const [professores, disciplinas, turmas, vinculos] = await Promise.all([
+          fbGet(PATH.professores), fbGet(PATH.disciplinas), fbGet(PATH.turmas), fbGet(PATH.vinculos)
+        ]);
+        cache.professores = professores || {};
+        cache.disciplinas = disciplinas || {};
+        cache.turmas = turmas || {};
+        cache.vinculos = vinculos || {};
+      } catch (e) { toast(e.message, "erro"); }
+
+      document.getElementById("r_disciplina").innerHTML =
+        Object.values(cache.disciplinas).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'))
+        .map(d => `<option value="${esc(d.id)}">${esc(d.codigo || d.id)} — ${esc(d.nome)}</option>`).join("")
+        || "<option value=''>Cadastre disciplinas primeiro.</option>";
+
+      renderTurmas();
+      render();
+    }
+
+    function renderTurmas() {
+      const box = document.getElementById("r_turmas");
+      const list = Object.values(cache.turmas).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+      box.innerHTML = list.length ? list.map(t => `
+        <label class="turma-item">
+          <input type="checkbox" class="rt" value="${esc(t.id)}">
+          <span>${esc(t.nome)} <small class="muted">(${esc(t.id)})</small></span>
+        </label>`).join("") : "<span class='muted'>Cadastre turmas primeiro.</span>";
+    }
+
+    function renderRelacoes() {
+      const tb = document.getElementById("relacoesBody");
+      const rows = [...relacoes].sort((a,b) => {
+        const da = cache.disciplinas[a.disciplinaId]?.nome || a.disciplinaId;
+        const db = cache.disciplinas[b.disciplinaId]?.nome || b.disciplinaId;
+        return String(da).localeCompare(String(db),'pt-BR') || String(a.turmaId).localeCompare(String(b.turmaId),'pt-BR');
+      });
+      tb.innerHTML = rows.length ? rows.map((r,i) => {
+        const d = cache.disciplinas[r.disciplinaId] || {};
+        const t = cache.turmas[r.turmaId] || {};
+        return `<tr>
+          <td>${esc(d.nome || r.disciplinaId)}</td>
+          <td>${esc(t.nome || r.turmaId)} <small class="muted">(${esc(r.turmaId)})</small></td>
+          <td>
+            <button class="btn btn-secundario btn-sm" onclick="editarRelacao(${i})">Editar</button>
+            <button class="btn btn-aviso btn-sm" onclick="removerRelacao(${i})">Remover</button>
+          </td>
+        </tr>`;
+      }).join("") : "<tr><td colspan='3'>Nenhuma relação adicionada.</td></tr>";
+    }
+
+    function render() {
+      const list = Object.values(cache.professores);
+      document.getElementById("tbody").innerHTML = list.length ? list.map(p => {
+        const vincs = Object.values(cache.vinculos).filter(v => v.professorId === p.id);
+        const ds = [...new Set(vincs.map(v => (cache.disciplinas[v.disciplinaId]||{}).nome || v.disciplinaId))];
+        const ts = [...new Set(vincs.map(v => (cache.turmas[v.turmaId]||{}).nome || v.turmaId))];
+        const legacyD = (p.disciplinas||[]).map(id => (cache.disciplinas[id]||{}).nome || id);
+        const legacyT = (p.turmas||[]).map(id => (cache.turmas[id]||{}).nome || id);
+        const disciplinas = ds.length ? ds : legacyD;
+        const turmas = ts.length ? ts : legacyT;
+        return `<tr>
+          <td>${esc(p.nome)}</td><td><strong>${esc(p.usuario||"—")}</strong></td>
+          <td>${disciplinas.map(x=>`<span class="pill">${esc(x)}</span>`).join("")||"—"}</td>
+          <td>${turmas.map(x=>`<span class="pill">${esc(x)}</span>`).join("")||"—"}</td>
+          <td><strong>${vincs.length}</strong></td>
+          <td>${p.ativo !== false ? "Sim" : "Não"}</td>
+          <td>
+            <button class="btn btn-secundario btn-sm" onclick="editar('${esc(p.id)}')">Editar</button>
+            <button class="btn btn-secundario btn-sm" onclick="resetar('${esc(p.id)}', '${esc(p.usuario||'-')}')">Reset senha</button>
+            <button class="btn btn-aviso btn-sm" onclick="excluir('${esc(p.id)}')">Excluir</button>
+          </td>
+        </tr>`;
+      }).join("") : "<tr><td colspan='7'>Nenhum professor cadastrado.</td></tr>";
+    }
+
+    function adicionarRelacao() {
+      const disciplinaId = document.getElementById("r_disciplina").value;
+      const turmas = [...document.querySelectorAll(".rt:checked")].map(x=>x.value);
+      if (!disciplinaId) return toast("Selecione uma disciplina.", "erro");
+      if (!turmas.length) return toast("Selecione pelo menos uma turma.", "erro");
+
+      let adicionadas = 0;
+      turmas.forEach(turmaId => {
+        const existe = relacoes.some(r => r.disciplinaId === disciplinaId && r.turmaId === turmaId);
+        if (!existe) { relacoes.push({ disciplinaId, turmaId }); adicionadas++; }
+      });
+      limparTurmas();
+      renderRelacoes();
+      toast(adicionadas ? `${adicionadas} relação(ões) adicionada(s).` : "Essas relações já existem.", "info");
+    }
+
+    function editarRelacao(index) {
+      const r = relacoes[index];
+      if (!r) return;
+      document.getElementById("r_disciplina").value = r.disciplinaId;
+      document.querySelectorAll(".rt").forEach(c => c.checked = c.value === r.turmaId);
+      relacoes.splice(index,1);
+      renderRelacoes();
+      document.getElementById("btnAdicionarRelacao").textContent = "Salvar alteração da relação";
+      document.getElementById("btnAdicionarRelacao").onclick = adicionarRelacao;
+      toast("Relação carregada para edição.", "info");
+    }
+
+    function removerRelacao(index) {
+      relacoes.splice(index,1);
+      renderRelacoes();
+    }
+
+    function marcarTodasTurmas() { document.querySelectorAll(".rt").forEach(c=>c.checked=true); }
+    function limparTurmas() { document.querySelectorAll(".rt").forEach(c=>c.checked=false); }
+
+    async function salvar() {
+      const nome = document.getElementById("p_nome").value.trim();
+      const usuario = document.getElementById("p_user").value.trim();
+      const cpf = document.getElementById("p_cpf").value.trim();
+      const senha = document.getElementById("p_senha").value.trim() || "123456";
+      if (!nome || !usuario) return toast("Nome e login são obrigatórios.", "erro");
+
+      const existe = Object.values(cache.professores).find(p => p.usuario === usuario && p.id !== editId);
+      if (existe) return toast("Este login já está em uso.", "erro");
+      if (!relacoes.length) return toast("Adicione pelo menos uma relação turma + disciplina.", "erro");
+
+      const id = editId || ("p_" + uid());
+      const disciplinas = [...new Set(relacoes.map(r=>r.disciplinaId))];
+      const turmas = [...new Set(relacoes.map(r=>r.turmaId))];
+      const anterior = cache.professores[id] || {};
+      const obj = {
+        ...anterior,
+        id, nome, cpf, usuario, senha, senhaInicial: senha,
+        disciplinas, turmas, ativo: anterior.ativo !== false
+      };
+
+      try {
+        // Primeiro salva o professor.
+        await fbPut(PATH.professores + "/" + id, obj);
+
+        // Sincroniza SOMENTE as relações deste professor.
+        const atuais = Object.entries(cache.vinculos).filter(([vid,v]) => v.professorId === id);
+        const usados = new Set();
+
+        for (const r of relacoes) {
+          const existente = atuais.find(([vid,v]) =>
+            !usados.has(vid) && v.turmaId === r.turmaId && v.disciplinaId === r.disciplinaId
+          );
+          const vid = existente ? existente[0] : ("v_" + uid());
+          usados.add(vid);
+          const vinc = { id: vid, professorId: id, turmaId: r.turmaId, disciplinaId: r.disciplinaId, ano: 2026 };
+          await fbPut(PATH.vinculos + "/" + vid, vinc);
+          cache.vinculos[vid] = vinc;
+        }
+
+        // Remove relações antigas que não estão mais no formulário.
+        for (const [vid] of atuais) {
+          if (!usados.has(vid)) {
+            await fbDelete(PATH.vinculos + "/" + vid);
+            delete cache.vinculos[vid];
+          }
+        }
+
+        cache.professores[id] = obj;
+        await registrarHistorico("professor", "Professor cadastrado/atualizado: " + nome, {
+          id, usuario, relacoes: relacoes.length
+        });
+
+        toast("Professor e relações salvos corretamente.", "sucesso");
+        cancelarEdicao();
+        render();
+      } catch (e) {
+        toast("Erro ao salvar: " + e.message, "erro");
+      }
+    }
+
+    function editar(id) {
+      const p = cache.professores[id]; if (!p) return;
+      editId = id;
+      document.getElementById("p_nome").value = p.nome || "";
+      document.getElementById("p_cpf").value = p.cpf || "";
+      document.getElementById("p_user").value = p.usuario || "";
+      document.getElementById("p_senha").value = p.senha || p.senhaInicial || "123456";
+
+      const links = Object.values(cache.vinculos).filter(v => v.professorId === id);
+      // Não recria combinações automaticamente: somente relações explícitas.
+      relacoes = links.map(v => ({ id:v.id, disciplinaId:v.disciplinaId, turmaId:v.turmaId }));
+      document.getElementById("editingBar").style.display = "flex";
+      document.getElementById("editingText").textContent = "Editando: " + (p.nome || "Professor");
+      document.getElementById("btnCancelar").style.display = "inline-flex";
+      renderRelacoes();
+      window.scrollTo({top:0,behavior:"smooth"});
+      toast("Professor carregado para edição.", "info");
+    }
+
+    function cancelarEdicao() {
+      editId = null;
+      relacoes = [];
+      ["p_nome","p_cpf","p_user"].forEach(i => document.getElementById(i).value = "");
+      document.getElementById("p_senha").value = "123456";
+      limparTurmas();
+      document.getElementById("editingBar").style.display = "none";
+      document.getElementById("btnCancelar").style.display = "none";
+      document.getElementById("btnAdicionarRelacao").textContent = "Adicionar relação";
+      document.getElementById("relacoesBody").innerHTML = "<tr><td colspan='3'>Nenhuma relação adicionada.</td></tr>";
+    }
+
+    async function excluir(id) {
+      if (!confirm("Excluir professor? As relações de turma e disciplina deste professor também serão removidas.")) return;
+      try {
+        const links = Object.entries(cache.vinculos).filter(([vid,v])=>v.professorId===id);
+        for (const [vid] of links) { await fbDelete(PATH.vinculos+"/"+vid); delete cache.vinculos[vid]; }
+        await fbDelete(PATH.professores + "/" + id);
+        delete cache.professores[id];
+        if (editId === id) cancelarEdicao();
+        render();
+        toast("Professor e relações excluídos.", "info");
+      } catch(e) { toast("Erro ao excluir: "+e.message,"erro"); }
+    }
+
+    function exportar() {
+      exportarCSV("professores.csv", ["Nome","Login","Disciplinas","Turmas","Relações"],
+        Object.values(cache.professores).map(p => {
+          const vs = Object.values(cache.vinculos).filter(v=>v.professorId===p.id);
+          return [p.nome,p.usuario,
+            [...new Set(vs.map(v=>(cache.disciplinas[v.disciplinaId]||{}).nome||v.disciplinaId))].join("|"),
+            [...new Set(vs.map(v=>(cache.turmas[v.turmaId]||{}).nome||v.turmaId))].join("|"),vs.length];
+        }));
+    }
+
+    async function resetar(id, usuario) {
+      const ok = await siapConfirmar(
+        "Redefinir a senha de acesso de " + usuario + " para a senha padrão institucional (123456)? O servidor deverá alterá-la no próximo acesso.",
+        "Redefinição de senha"
+      );
+      if (!ok) return;
+      try {
+        await resetarSenhaUsuario(usuario, "123456", "professor", id);
+        if (cache.professores[id]) {
+          cache.professores[id].senha = "123456";
+          cache.professores[id].senhaInicial = "123456";
+        }
+        render();
+        toast("Senha redefinida para o padrão institucional.", "sucesso");
+      } catch (e) { toast(e.message, "erro"); }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin(["Secretaria", "Gestor", "Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Professores", "Cadastro com acesso ao SIGEP");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      if (typeof aplicarNavSec === "function") aplicarNavSec("sec-professores.html");
+      load();
+    });
+  </script>
+</body>
+</html>

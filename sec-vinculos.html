@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Vínculos</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .vinc-layout { display:grid; grid-template-columns:minmax(280px,340px) 1fr; gap:16px; padding:16px; }
+    @media(max-width:900px){ .vinc-layout { grid-template-columns:1fr; } }
+    .vinc-form {
+      background:#f7f9fc; border:1px solid var(--borda); border-radius:12px; padding:16px;
+      position:sticky; top:70px;
+    }
+    .vinc-form h3 { margin:0 0 12px; color:var(--azul-escuro); font-size:15px; }
+    .vinc-form label { display:block; font-size:11px; font-weight:700; color:#555; margin:10px 0 4px; text-transform:uppercase; }
+    .vinc-form select { width:100%; padding:9px 10px; border:1px solid var(--borda); border-radius:6px; font-size:13px; background:#fff; }
+    .vinc-form .btn { width:100%; margin-top:14px; justify-content:center; }
+    .vinc-lista { display:flex; flex-direction:column; gap:10px; }
+    .vinc-grupo {
+      border:1px solid var(--borda); border-radius:10px; overflow:hidden; background:#fff;
+    }
+    .vinc-grupo-cab {
+      background:linear-gradient(90deg,#e8f1f8,#f5f8fb); padding:10px 14px;
+      font-weight:700; color:var(--azul-escuro); font-size:13px;
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    .vinc-row {
+      display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:center;
+      padding:8px 14px; border-top:1px solid #eef2f6; font-size:13px;
+    }
+    .vinc-row:hover { background:#f8fafc; }
+    .vinc-pill {
+      display:inline-block; padding:3px 8px; border-radius:999px;
+      background:#eef4ff; color:#24558a; font-size:12px; font-weight:600;
+    }
+    .filtros-top { display:flex; gap:10px; flex-wrap:wrap; padding:0 16px 8px; align-items:flex-end; }
+    .filtros-top .filtro-grupo { min-width:160px; }
+    .empty-vinc { padding:24px; text-align:center; color:#888; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div id="topo"></div>
+  <nav class="nav-sec"></nav>
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-header">
+        <h2>Vínculos — Professor × Turma × Disciplina</h2>
+        <button class="btn btn-secundario no-print" onclick="window.print()">Imprimir</button>
+      </div>
+      <div class="sub-sec">Cada combinação libera o diário daquela disciplina naquela turma para o professor. Agrupado por professor.</div>
+
+      <div class="filtros-top no-print">
+        <div class="filtro-grupo"><label>Filtrar professor</label><select id="f_prof" onchange="renderVinc()"><option value="">Todos</option></select></div>
+        <div class="filtro-grupo"><label>Filtrar turma</label><select id="f_turma" onchange="renderVinc()"><option value="">Todas</option></select></div>
+      </div>
+
+      <div class="vinc-layout">
+        <div class="vinc-form no-print">
+          <h3 id="formTitulo">Novo vínculo</h3>
+          <label>Professor</label>
+          <select id="v_prof"></select>
+          <label>Turma</label>
+          <select id="v_turma"></select>
+          <label>Disciplina</label>
+          <select id="v_disc"></select>
+          <button class="btn btn-sucesso" id="btnSalvar" onclick="salvarVinc()">Adicionar vínculo</button>
+          <button class="btn btn-secundario" id="btnCancelar" style="display:none;margin-top:8px" onclick="cancelarEdicao()">Cancelar edição</button>
+        </div>
+        <div class="vinc-lista" id="lista"></div>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let C = { professores:{}, turmas:{}, disciplinas:{}, vinculos:{} };
+    let editingVincId = null;
+
+    async function load() {
+      try {
+        const [p,t,d,v] = await Promise.all([
+          fbGet(PATH.professores), fbGet(PATH.turmas), fbGet(PATH.disciplinas), fbGet(PATH.vinculos)
+        ]);
+        C.professores = p||{}; C.turmas = t||{}; C.disciplinas = d||{}; C.vinculos = v||{};
+      } catch(e){ toast(e.message,"erro"); }
+      preencherSelects();
+      renderVinc();
+    }
+
+    function preencherSelects() {
+      const optP = Object.values(C.professores).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'))
+        .map(p=>`<option value="${p.id}">${p.nome}</option>`).join("") || "<option value=''>—</option>";
+      const optT = Object.values(C.turmas).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'))
+        .map(t=>`<option value="${t.id}">${t.nome}</option>`).join("") || "<option value=''>—</option>";
+      const optD = Object.values(C.disciplinas).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'))
+        .map(d=>`<option value="${d.id}">${d.codigo||d.id} — ${d.nome}</option>`).join("") || "<option value=''>—</option>";
+      document.getElementById("v_prof").innerHTML = optP;
+      document.getElementById("v_turma").innerHTML = optT;
+      document.getElementById("v_disc").innerHTML = optD;
+      document.getElementById("f_prof").innerHTML = '<option value="">Todos</option>' + optP;
+      document.getElementById("f_turma").innerHTML = '<option value="">Todas</option>' + optT;
+    }
+
+    function renderVinc() {
+      const fp = document.getElementById("f_prof").value;
+      const ft = document.getElementById("f_turma").value;
+      const list = Object.entries(C.vinculos).filter(([,v]) =>
+        (!fp || v.professorId===fp) && (!ft || v.turmaId===ft)
+      );
+      // group by professor
+      const porProf = {};
+      list.forEach(([id,v]) => {
+        const pid = v.professorId || "_";
+        if (!porProf[pid]) porProf[pid] = [];
+        porProf[pid].push([id,v]);
+      });
+      const el = document.getElementById("lista");
+      const pids = Object.keys(porProf).sort((a,b) => {
+        const na = (C.professores[a]||{}).nome || a;
+        const nb = (C.professores[b]||{}).nome || b;
+        return String(na).localeCompare(String(nb),'pt-BR');
+      });
+      if (!pids.length) {
+        el.innerHTML = '<div class="empty-vinc">Nenhum vínculo encontrado. Use o formulário ao lado para adicionar.</div>';
+        return;
+      }
+      el.innerHTML = pids.map(pid => {
+        const pn = (C.professores[pid]||{}).nome || pid;
+        const rows = porProf[pid].map(([id,v]) => {
+          const tn = (C.turmas[v.turmaId]||{}).nome || v.turmaId;
+          const dn = (C.disciplinas[v.disciplinaId]||{}).nome || v.disciplinaId;
+          return `<div class="vinc-row">
+            <span class="vinc-pill">${tn}</span>
+            <span>${dn}</span>
+            <span class="no-print">
+              <button class="btn btn-secundario btn-sm" onclick="editarVinc('${id}')">Editar</button>
+              <button class="btn btn-aviso btn-sm" onclick="removerVinc('${id}')">Remover</button>
+            </span>
+          </div>`;
+        }).join("");
+        return `<div class="vinc-grupo">
+          <div class="vinc-grupo-cab"><span>${pn}</span><span style="font-weight:500;color:#666">${porProf[pid].length} vínculo(s)</span></div>
+          ${rows}
+        </div>`;
+      }).join("");
+    }
+
+    async function salvarVinc() {
+      const professorId = document.getElementById("v_prof").value;
+      const turmaId = document.getElementById("v_turma").value;
+      const disciplinaId = document.getElementById("v_disc").value;
+      if (!professorId||!turmaId||!disciplinaId) return toast("Selecione professor, turma e disciplina.","erro");
+      const dup = Object.values(C.vinculos).some(v =>
+        v.professorId===professorId && v.turmaId===turmaId && v.disciplinaId===disciplinaId &&
+        (!editingVincId || (v.id && v.id!==editingVincId))
+      );
+      // also check by key match without id
+      const dup2 = Object.entries(C.vinculos).some(([id,v]) =>
+        v.professorId===professorId && v.turmaId===turmaId && v.disciplinaId===disciplinaId && id!==editingVincId
+      );
+      if (dup || dup2) return toast("Este vínculo já existe.","erro");
+
+      const id = editingVincId || ("v_"+uid());
+      const obj = { id, professorId, turmaId, disciplinaId, ano: 2026 };
+      try {
+        await fbPut(PATH.vinculos+"/"+id, obj);
+        C.vinculos[id] = obj;
+        await atualizarProfessorDerivado(professorId);
+        toast(editingVincId ? "Vínculo atualizado." : "Vínculo adicionado.","sucesso");
+        cancelarEdicao();
+        renderVinc();
+      } catch(e){ toast(e.message,"erro"); }
+    }
+
+    function editarVinc(id) {
+      const v = C.vinculos[id]; if (!v) return;
+      editingVincId = id;
+      document.getElementById("v_prof").value = v.professorId;
+      document.getElementById("v_turma").value = v.turmaId;
+      document.getElementById("v_disc").value = v.disciplinaId;
+      document.getElementById("formTitulo").textContent = "Editar vínculo";
+      document.getElementById("btnSalvar").textContent = "Salvar alteração";
+      document.getElementById("btnCancelar").style.display = "block";
+    }
+
+    function cancelarEdicao() {
+      editingVincId = null;
+      document.getElementById("formTitulo").textContent = "Novo vínculo";
+      document.getElementById("btnSalvar").textContent = "Adicionar vínculo";
+      document.getElementById("btnCancelar").style.display = "none";
+    }
+
+    async function removerVinc(id) {
+      const v = C.vinculos[id]; if (!v) return;
+      if (!confirm("Remover este vínculo?")) return;
+      try {
+        await fbDelete(PATH.vinculos+"/"+id);
+        delete C.vinculos[id];
+        await atualizarProfessorDerivado(v.professorId);
+        if (editingVincId===id) cancelarEdicao();
+        renderVinc();
+        toast("Vínculo removido.","info");
+      } catch(e){ toast(e.message,"erro"); }
+    }
+
+    async function atualizarProfessorDerivado(professorId) {
+      const p = C.professores[professorId]; if (!p) return;
+      const links = Object.values(C.vinculos).filter(v => v.professorId===professorId);
+      p.disciplinas = [...new Set(links.map(v=>v.disciplinaId))];
+      p.turmas = [...new Set(links.map(v=>v.turmaId))];
+      await fbPut(PATH.professores+"/"+professorId, p);
+      C.professores[professorId] = p;
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin(["Secretaria","Gestor","Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Vínculos", "Secretaria · Ano 2026");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      if (typeof aplicarNavSec === "function") aplicarNavSec("sec-vinculos.html");
+      load();
+    });
+  </script>
+</body>
+</html>

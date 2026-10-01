@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Diario do Professor</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="topo"></div>
+
+  <div id="etapaTrabalho">
+    <div style="display:none">
+      <input id="anoLetivo" value="2026" />
+      <input id="ctxLabel" readonly />
+      <select id="serie"></select>
+      <select id="disciplina"></select>
+      <select id="bimestre">
+        <option value="1">1</option>
+        <option value="2" selected>2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+      </select>
+    </div>
+
+    <div class="filtros" style="padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <span id="ctxBannerTxt" style="font-weight:600;color:var(--azul-escuro);font-size:14px"></span>
+      <a href="diario-inicio.html" class="btn btn-secundario" style="margin-left:auto;text-decoration:none">Voltar a selecao</a>
+    </div>
+
+    <main class="conteudo">
+      <div id="painel-notas" class="painel" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <h2>Notas — <span id="tituloTurma"></span></h2>
+            <div class="acoes">
+              <button class="btn btn-aviso" onclick="abrirModalColuna()">+ Metodo de avaliacao</button>
+              <button class="btn btn-secundario" onclick="exportNotas()">Exportar</button>
+              <button class="btn btn-sucesso" id="btnSalvarNotas" onclick="salvarNotas()">Salvar notas</button>
+            </div>
+          </div>
+          <div class="peso-info">
+            Metodos definidos pelo professor → <strong>60%</strong>. Prova de Bloco desta disciplina → <strong>40%</strong>.
+            Aprovacao ≥ 6,0.
+          </div>
+          <div class="tabela-wrapper">
+            <table class="diario">
+              <thead id="cabecalhoNotas"></thead>
+              <tbody id="corpoNotas"><tr><td colspan="20" class="loading">Carregando...</td></tr></tbody>
+            </table>
+          </div>
+          <div class="status-bar">
+            <span id="statusConexao"><span class="dot dot-local"></span>Pronto</span>
+            <span>Diario do Professor · Notas</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="painel-frequencia" class="painel" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <h2>Frequencia — disciplina selecionada</h2>
+            <button class="btn btn-sucesso" onclick="salvarFrequencia()">Salvar frequencia</button>
+          </div>
+          <div class="peso-info">
+            A falta lancada aqui vale <strong>somente para este componente curricular</strong>.
+            Marque os dias, lance P/F e clique em <strong>Salvar frequencia</strong>. Os dados permanecem apos atualizar a pagina.
+          </div>
+          <div class="freq-wrap">
+            <div class="freq-cal-box">
+              <h3 id="calTitulo">Calendario</h3>
+              <div class="freq-legenda-cal">
+                <span><i class="nao"></i> Nao lancado</span>
+                <span><i class="sim"></i> Lancado</span>
+                <span><i class="sel"></i> Selecionado</span>
+              </div>
+              <div class="freq-calendario" id="calendarioFreq"></div>
+              <p id="freqInfo" style="font-size:11px;color:#666;margin-top:10px;text-align:center"></p>
+            </div>
+            <div class="freq-alunos" id="listaFreqAlunos"><p class="loading">Selecione um dia.</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="painel-conteudo" class="painel" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <h2>Planejamento de aulas</h2>
+            <button class="btn btn-sucesso" onclick="salvarPlanejamento()">SALVAR PLANEJAMENTO</button>
+          </div>
+          <div class="plan-grid">
+            <div class="plan-item"><label>Data da aula</label><input type="date" id="pl_data" /></div>
+            <div class="plan-item"><label>Quantidade de aulas</label><input type="number" id="pl_qtd" min="1" max="10" value="1" /></div>
+            <div class="plan-item" style="grid-column:1/-1"><label>Conteudo / objeto de conhecimento</label><textarea id="pl_conteudo"></textarea></div>
+            <div class="plan-item"><label>Metodologia</label><textarea id="pl_metodo"></textarea></div>
+            <div class="plan-item"><label>Recursos / avaliacao formativa</label><textarea id="pl_recursos"></textarea></div>
+          </div>
+          <div class="plan-lista">
+            <h3 style="font-size:14px;margin-bottom:8px;color:var(--azul-escuro)">Aulas planejadas</h3>
+            <div id="listaPlanejamento"><p class="loading">Nenhum planejamento registrado.</p></div>
+          </div>
+          <div style="padding:0 16px 16px">
+            <label style="font-size:11px;font-weight:700;color:#555">Observacoes gerais do bimestre</label>
+            <textarea id="conteudoAula" style="width:100%;min-height:70px;margin-top:4px;padding:8px;border:1px solid var(--borda);border-radius:4px"></textarea>
+            <button class="btn btn-secundario" style="margin-top:8px" onclick="salvarConteudo()">SALVAR OBSERVACOES</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-bg" id="modalColuna">
+    <div class="modal">
+      <h3>Novo metodo de avaliacao (60%)</h3>
+      <input type="text" id="nomeColuna" placeholder="Ex.: Trabalho, Seminario, Caderno" maxlength="40" />
+      <div class="modal-acoes">
+        <button class="btn btn-secundario" onclick="fecharModalColuna()">Cancelar</button>
+        <button class="btn btn-primario" onclick="addColuna()">Incluir</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script src="diario.js"></script>
+</body>
+</html>

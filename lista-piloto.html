@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Lista Piloto </title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .piloto {
+      background:#fff; max-width:1000px; margin:0 auto; padding:14px 18px;
+      border:1px solid #333; font-family: Arial, Helvetica, sans-serif; font-size:11px; color:#000;
+    }
+    .piloto-cab {
+      display:flex; align-items:center; gap:12px;
+      border:1px solid #000; padding:8px 10px; margin-bottom:0;
+    }
+    .piloto-cab .logos { display:flex; align-items:center; gap:8px; }
+    .piloto-cab .logos img { height:48px; object-fit:contain; }
+    .piloto-cab .centro { flex:1; }
+    .piloto-cab .centro strong { display:block; font-size:13px; letter-spacing:.3px; }
+    .piloto-cab .centro span { font-size:11px; }
+    .piloto-meta {
+      border:1px solid #000; border-top:none; display:grid;
+      grid-template-columns: 1fr 1fr 1fr; font-size:11px;
+    }
+    .piloto-meta div { padding:5px 8px; border-right:1px solid #000; }
+    .piloto-meta div:last-child { border-right:none; }
+    .piloto-titulo {
+      text-align:center; font-weight:700; font-size:12px;
+      border:1px solid #000; border-top:none; padding:7px; background:#eef3f8;
+    }
+    .piloto-table { width:100%; border-collapse:collapse; font-size:10.5px; margin-top:0; }
+    .piloto-table th, .piloto-table td {
+      border:1px solid #000; padding:4px 5px; text-align:center; height:20px;
+    }
+    .piloto-table th { background:#e8eef5; font-weight:700; }
+    .piloto-table td.nome { text-align:left; padding-left:6px; font-weight:500; }
+    .piloto-table .chk { width:22px; min-width:22px; }
+    .piloto-rodape {
+      margin-top:12px; display:flex; justify-content:space-between; font-size:10px;
+      border-top:1px solid #999; padding-top:8px;
+    }
+    @media print {
+      .topo, .filtros, .no-print { display:none !important; }
+      body { background:#fff; margin:0; padding:0; }
+      .piloto { border:none; max-width:100%; box-shadow:none; padding:4mm 6mm; font-size:9px; }
+      .piloto-table th, .piloto-table td { padding:2px 3px; height:14px; font-size:9px; }
+      .piloto-cab .logos img { height:32px; }
+      .piloto-cab .centro strong { font-size:11px; }
+      .piloto-titulo { font-size:10px; padding:4px; }
+      .piloto-meta { font-size:9px; }
+      .piloto-rodape { font-size:8px; margin-top:6px; }
+      @page { size: A4 landscape; margin: 8mm; }
+    }
+    @media print and (orientation: portrait) {
+      @page { size: A4 portrait; margin: 8mm; }
+      .piloto-table th, .piloto-table td { padding:1px 2px; height:12px; font-size:8px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="topo" class="no-print"></div>
+  <section class="filtros no-print">
+    <div class="filtro-grupo"><label>Turma</label><select id="lp_turma"></select></div>
+    <div class="filtro-grupo"><label>Colunas em branco</label>
+      <select id="lp_cols">
+        <option value="10">10</option>
+        <option value="15" selected>15</option>
+        <option value="20">20</option>
+        <option value="25">25</option>
+      </select>
+    </div>
+    <div class="filtro-grupo"><label>&nbsp;</label><button class="btn btn-primario" onclick="gerar()">Gerar lista</button></div>
+    <div class="filtro-grupo"><label>&nbsp;</label><button class="btn btn-secundario" onclick="window.print()">Imprimir</button></div>
+  </section>
+  <main class="conteudo">
+    <p class="loading no-print" style="padding:12px 16px;font-size:13px;color:#555">
+      Lista piloto da <strong>turma</strong> — sem faltas, sem disciplina e sem dados de professor.
+      Use para chamada manual / conferência de matrícula.
+    </p>
+    <div id="area"></div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let cache = {};
+    async function init() {
+      // Secretaria, Gestor, Coordenação — lista da escola/turma
+      const u = exigirLogin(["Secretaria", "Gestor", "Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Lista Piloto da Turma", "Somente dados da turma");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      try {
+        cache.turmas = (await fbGet(PATH.turmas)) || {};
+        cache.alunos = (await fbGet(PATH.alunos)) || {};
+      } catch (e) { toast(e.message, "erro"); }
+      document.getElementById("lp_turma").innerHTML =
+        Object.values(cache.turmas).map(t => `<option value="${t.id}">${t.nome}</option>`).join("") || "<option>2A</option>";
+    }
+
+    function gerar() {
+      const turmaId = document.getElementById("lp_turma").value;
+      const nCols = parseInt(document.getElementById("lp_cols").value) || 15;
+      const turma = (cache.turmas || {})[turmaId] || {};
+      // Ordem alfabética estrita por nome; nº de chamada = posição na lista
+      const alunos = Object.values(cache.alunos || {})
+        .filter(a => a.turma === turmaId && a.status !== "Transferido" && a.homologado !== false)
+        .sort((a, b) => String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", { sensitivity: "base" }));
+
+      const cols = Array.from({ length: nCols }, (_, i) => i + 1);
+      const TOTAL_LINHAS = 40;
+      const linhas = [];
+      for (let i = 0; i < TOTAL_LINHAS; i++) {
+        if (i < alunos.length) {
+          linhas.push({ n: i + 1, nome: alunos[i].nome, mat: alunos[i].matricula || "" });
+        } else {
+          linhas.push({ n: i + 1, nome: "", mat: "" });
+        }
+      }
+
+      document.getElementById("area").innerHTML = `
+      <div class="piloto">
+        <div class="piloto-cab">
+          <div class="logos">
+            <img src="${LOGO_GO}" alt="GO" onerror="this.style.display='none'" />
+          </div>
+          <div class="centro">
+            <strong>ESTADO DE GOIÁS</strong>
+            <strong>SECRETARIA DE ESTADO DA EDUCAÇÃO</strong>
+            <span>COLÉGIO ESTADUAL — CÓD. 520</span>
+          </div>
+        </div>
+        <div class="piloto-meta">
+          <div><strong>Turma:</strong> ${turma.nome || turmaId}</div>
+          <div><strong>Série / Turno:</strong> ${turma.serie || "—"} · ${turma.turno || "—"}</div>
+          <div><strong>Ano letivo:</strong> ${ANO_LETIVO} · ${turma.composicao || ""}</div>
+        </div>
+        <div class="piloto-titulo">LISTA PILOTO DA TURMA — CHAMADA / CONFERÊNCIA (40 LINHAS · ORDEM ALFABÉTICA)</div>
+        <table class="piloto-table">
+          <thead>
+            <tr>
+              <th style="width:28px">Nº</th>
+              <th style="min-width:160px">Nome do Aluno</th>
+              <th style="width:90px">Matrícula</th>
+              ${cols.map(c => `<th class="chk"></th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${linhas.map(l => `
+              <tr>
+                <td>${l.n}</td>
+                <td class="nome">${l.nome}</td>
+                <td>${l.mat}</td>
+                ${cols.map(() => "<td></td>").join("")}
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        <div class="piloto-rodape">
+          <span>Emitido em: ${new Date().toLocaleDateString("pt-BR")} · SIGEP Goiás</span>
+          <span>Assinatura: _______________________________</span>
+        </div>
+      </div>`;
+      toast("Lista piloto gerada: 40 linhas, ordem alfabética.", "sucesso");
+    }
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Chamada Diária </title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .chamada-form { padding: 16px; }
+    .chamada-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .chamada-table th { background: var(--azul-siap); color: #fff; padding: 8px; text-align: left; }
+    .chamada-table td { border: 1px solid var(--borda); padding: 6px 8px; }
+    .chamada-table tr:nth-child(even) { background: #f8fafc; }
+    .btn-freq {
+      min-width: 36px; height: 32px; border-radius: 4px; border: 2px solid #ccc;
+      font-weight: 800; font-size: 14px; cursor: pointer; background: #fff;
+    }
+    .btn-freq.P { background: #e8f5e9; color: #2e7d32; border-color: #66bb6a; }
+    .btn-freq.F { background: #ffebee; color: #c62828; border-color: #ef5350; }
+    .btn-freq.J { background: #fff8e1; color: #f57f17; border-color: #ffb300; }
+    .resumo-dia {
+      display: flex; gap: 16px; flex-wrap: wrap; padding: 10px 16px;
+      background: #f0f6fc; border-bottom: 1px solid var(--borda); font-size: 13px;
+    }
+    .resumo-dia strong { color: var(--azul-escuro); }
+  </style>
+</head>
+<body>
+  <div id="topo"></div>
+  <section class="filtros">
+    <div class="filtro-grupo"><label>Turma</label><select id="cd_turma"></select></div>
+    <div class="filtro-grupo"><label>Data da chamada</label><input type="date" id="cd_data" /></div>
+    <div class="filtro-grupo"><label>&nbsp;</label><button class="btn btn-primario" onclick="carregar()">Abrir formulário</button></div>
+    <div class="filtro-grupo"><label>&nbsp;</label><button class="btn btn-sucesso" id="btnSalvar" onclick="salvar()" disabled>Salvar chamada do dia</button></div>
+    <div class="filtro-grupo"><label>&nbsp;</label><button class="btn btn-secundario" onclick="location.href='menu.html'">Menu</button></div>
+  </section>
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-header">
+        <h2>Chamada diária da escola</h2>
+      </div>
+      <div class="sub-sec">
+        Formulário <strong>por dia e por turma</strong> (não por disciplina).
+        Lançamento da Secretaria / Coordenação / Gestor.
+        Presente (P), Falta (F) ou Falta justificada (J).
+        As faltas alimentam o consolidado escolar e podem ser consultadas nos relatórios.
+      </div>
+      <div class="resumo-dia" id="resumo">Selecione turma e data.</div>
+      <div class="chamada-form">
+        <table class="chamada-table">
+          <thead>
+            <tr>
+              <th style="width:40px">Nº</th>
+              <th>Aluno</th>
+              <th style="width:100px">Matrícula</th>
+              <th style="width:200px;text-align:center">Situação no dia</th>
+            </tr>
+          </thead>
+          <tbody id="tb"><tr><td colspan="4" class="loading">Aguardando filtros…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="status-bar">
+        <span id="statusCd"><span class="dot dot-local"></span>Pronto</span>
+        <span>Chamada escolar · não substitui a frequência por disciplina do diário do professor</span>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let alunos = [];
+    let mapa = {}; // alunoId -> P|F|J
+    let cache = {};
+
+    async function init() {
+      const u = exigirLogin(["Secretaria", "Gestor", "Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Chamada Diária", "Secretaria Escolar · por dia");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      const hoje = new Date();
+      document.getElementById("cd_data").value =
+        hoje.getFullYear() + "-" + String(hoje.getMonth()+1).padStart(2,"0") + "-" + String(hoje.getDate()).padStart(2,"0");
+      try {
+        cache.turmas = (await fbGet(PATH.turmas)) || {};
+        cache.alunos = (await fbGet(PATH.alunos)) || {};
+      } catch (e) { toast(e.message, "erro"); }
+      document.getElementById("cd_turma").innerHTML =
+        Object.values(cache.turmas).map(t => `<option value="${t.id}">${t.nome}</option>`).join("") || "<option value=''>—</option>";
+    }
+
+    function alt(id, el) {
+      const ordem = ["P", "F", "J"];
+      const atual = mapa[id] || "P";
+      const prox = ordem[(ordem.indexOf(atual) + 1) % 3];
+      mapa[id] = prox;
+      el.textContent = prox;
+      el.className = "btn-freq " + prox;
+      atualizarResumo();
+    }
+
+    function atualizarResumo() {
+      let p = 0, f = 0, j = 0;
+      Object.values(mapa).forEach(v => {
+        if (v === "P") p++; else if (v === "F") f++; else if (v === "J") j++;
+      });
+      document.getElementById("resumo").innerHTML =
+        `<span><strong>Presentes:</strong> ${p}</span>
+         <span><strong>Faltas:</strong> ${f}</span>
+         <span><strong>Justificadas:</strong> ${j}</span>
+         <span><strong>Total na lista:</strong> ${alunos.length}</span>`;
+    }
+
+    async function carregar() {
+      const turma = document.getElementById("cd_turma").value;
+      const data = document.getElementById("cd_data").value;
+      if (!turma || !data) { toast("Informe turma e data.", "erro"); return; }
+
+      alunos = Object.values(cache.alunos || {})
+        .filter(a => a.turma === turma && a.status !== "Transferido" && a.homologado !== false)
+        .sort((a, b) => (a.nCham || 0) - (b.nCham || 0) || String(a.nome).localeCompare(b.nome));
+
+      mapa = {};
+      try {
+        const prev = await fbGet(PATH.chamadaEscolar(ANO_LETIVO, turma) + "/" + data);
+        if (prev && prev.alunos) {
+          Object.keys(prev.alunos).forEach(id => { mapa[id] = prev.alunos[id]; });
+        }
+      } catch (e) {}
+
+      alunos.forEach(a => { if (!mapa[a.id]) mapa[a.id] = "P"; });
+
+      const tb = document.getElementById("tb");
+      if (!alunos.length) {
+        tb.innerHTML = "<tr><td colspan='4'>Nenhum aluno homologado nesta turma.</td></tr>";
+        document.getElementById("btnSalvar").disabled = true;
+        return;
+      }
+      tb.innerHTML = alunos.map((a, i) => {
+        const s = mapa[a.id] || "P";
+        return `<tr>
+          <td>${a.nCham || i + 1}</td>
+          <td>${a.nome}</td>
+          <td>${a.matricula || ""}</td>
+          <td style="text-align:center">
+            <button type="button" class="btn-freq ${s}" onclick="alt('${a.id}', this)" title="Clique para alternar P → F → J">${s}</button>
+          </td>
+        </tr>`;
+      }).join("");
+      document.getElementById("btnSalvar").disabled = false;
+      atualizarResumo();
+      document.getElementById("statusCd").innerHTML = '<span class="dot dot-local"></span>Formulário aberto · ' + data.split("-").reverse().join("/");
+    }
+
+    async function salvar() {
+      const turma = document.getElementById("cd_turma").value;
+      const data = document.getElementById("cd_data").value;
+      const u = getUser();
+      if (!turma || !data) return;
+      const payload = {
+        data, turma, ano: ANO_LETIVO,
+        alunos: { ...mapa },
+        lancadoPor: u?.nome || "",
+        perfil: u?.perfil || "",
+        timestamp: agoraISO()
+      };
+      // contadores
+      let p = 0, f = 0, j = 0;
+      Object.values(mapa).forEach(v => { if (v === "P") p++; else if (v === "F") f++; else j++; });
+      payload.resumo = { presentes: p, faltas: f, justificadas: j, total: alunos.length };
+
+      mostrarCarregando("Gravando chamada do dia...");
+      try {
+        await fbPut(PATH.chamadaEscolar(ANO_LETIVO, turma) + "/" + data, payload);
+        // consolida total de faltas escolares do aluno (campo faltasEscola no cadastro — opcional)
+        for (const a of alunos) {
+          if (mapa[a.id] === "F" || mapa[a.id] === "J") {
+            // não altera o cadastro em lote pesado; histórico já registra
+          }
+        }
+        await registrarHistorico("chamada_escolar",
+          `Chamada ${data} turma ${turma}: ${p}P / ${f}F / ${j}J`,
+          { turma, data, ...payload.resumo });
+        toast("Chamada do dia salva. Faltas registradas no consolidado escolar.", "sucesso");
+        document.getElementById("statusCd").innerHTML = '<span class="dot dot-online"></span>Salvo · ' + data.split("-").reverse().join("/");
+      } catch (e) {
+        toast("Erro: " + e.message, "erro");
+      }
+      ocultarCarregando();
+    }
+
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>

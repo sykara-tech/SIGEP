@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Turmas</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .disc-check-grid {
+      display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+      gap:6px; max-height:200px; overflow:auto; padding:10px;
+      background:#fff; border:1px solid var(--borda); border-radius:8px; margin-top:4px;
+    }
+    .disc-check-grid label {
+      display:flex; align-items:center; gap:6px; font-size:12.5px; padding:5px 6px;
+      border-radius:6px; background:#f8fafc; cursor:pointer; text-transform:none; font-weight:500; color:#333;
+    }
+    .disc-check-grid label:hover { background:#eef5fc; }
+    .pill-disc { display:inline-block; padding:2px 7px; margin:1px; border-radius:999px; background:#eef4ff; color:#24558a; font-size:11px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div id="topo"></div>
+  <nav class="nav-sec"></nav>
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-header">
+        <h2>Turmas 2026</h2>
+        <div class="acoes">
+          <button class="btn btn-secundario" onclick="expTurmas()">CSV</button>
+          <button class="btn btn-secundario no-print" onclick="imprimirTurmas()">Imprimir</button>
+          <button class="btn btn-sucesso" onclick="salvarTurma()">Salvar turma</button>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div><label>Código</label><input id="t_id" placeholder="1TA" /></div>
+        <div><label>Nome</label><input id="t_nome" placeholder='1ª Técnico "A" — Informática' /></div>
+        <div><label>Série</label><input id="t_serie" placeholder="1º Ano Tec." /></div>
+        <div><label>Turno</label>
+          <select id="t_turno"><option>Matutino</option><option>Vespertino</option><option>Noturno</option></select>
+        </div>
+        <div><label>Composição</label>
+          <select id="t_comp">
+            <option>Ensino Médio</option>
+            <option>Ensino Médio Integrado</option>
+            <option>Ensino Fundamental</option>
+          </select>
+        </div>
+      </div>
+      <div style="padding:0 16px 12px">
+        <label style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase">Componentes desta turma</label>
+        <p style="font-size:12px;color:#666;margin:4px 0 6px">Marque as disciplinas que fazem parte da matriz desta turma (boletim e vínculos usam esta lista).</p>
+        <div class="disc-check-grid" id="t_discs"></div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button type="button" class="btn btn-secundario btn-sm" onclick="marcarTodasDisc(true)">Todas</button>
+          <button type="button" class="btn btn-secundario btn-sm" onclick="marcarTodasDisc(false)">Nenhuma</button>
+        </div>
+      </div>
+      <div style="padding:0 16px 16px;overflow-x:auto">
+        <table class="tabela-cad">
+          <thead><tr><th>Cód</th><th>Nome</th><th>Série</th><th>Turno</th><th>Composição</th><th>Disciplinas</th><th></th></tr></thead>
+          <tbody id="tb"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let turmas = {}, disciplinas = {};
+    let editId = null;
+
+    async function load() {
+      try {
+        turmas = (await fbGet(PATH.turmas)) || {};
+        disciplinas = (await fbGet(PATH.disciplinas)) || {};
+      } catch(e){ toast(e.message,"erro"); }
+      document.getElementById("t_discs").innerHTML = Object.values(disciplinas)
+        .sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'))
+        .map(d => `<label><input type="checkbox" class="td" value="${d.id}"> ${d.codigo||d.id} — ${d.nome}</label>`)
+        .join("") || "<span style='color:#888;padding:8px'>Cadastre disciplinas primeiro.</span>";
+      render();
+    }
+
+    function marcarTodasDisc(v) {
+      document.querySelectorAll(".td").forEach(c => c.checked = v);
+    }
+
+    function discsSelecionadas() {
+      return [...document.querySelectorAll(".td:checked")].map(c => c.value);
+    }
+
+    function render() {
+      const list = Object.values(turmas);
+      document.getElementById("tb").innerHTML = list.length ? list.map(t => {
+        const ds = (t.disciplinas||[]).map(id => {
+          const d = disciplinas[id];
+          return d ? `<span class="pill-disc">${d.nome}</span>` : "";
+        }).join("") || "—";
+        return `<tr>
+          <td><strong>${t.id}</strong></td>
+          <td>${t.nome||""}</td>
+          <td>${t.serie||""}</td>
+          <td>${t.turno||""}</td>
+          <td>${t.composicao||""}</td>
+          <td>${ds}</td>
+          <td class="no-print">
+            <button class="btn btn-secundario btn-sm" onclick="editar('${t.id}')">Editar</button>
+            <button class="btn btn-aviso btn-sm" onclick="excluir('${t.id}')">Excluir</button>
+          </td>
+        </tr>`;
+      }).join("") : "<tr><td colspan='7'>Nenhuma turma. Cadastre acima.</td></tr>";
+    }
+
+    function editar(id) {
+      const t = turmas[id]; if (!t) return;
+      editId = id;
+      document.getElementById("t_id").value = t.id;
+      document.getElementById("t_id").readOnly = true;
+      document.getElementById("t_nome").value = t.nome || "";
+      document.getElementById("t_serie").value = t.serie || "";
+      document.getElementById("t_turno").value = t.turno || "Matutino";
+      document.getElementById("t_comp").value = t.composicao || "Ensino Médio";
+      const set = new Set(t.disciplinas || []);
+      document.querySelectorAll(".td").forEach(c => c.checked = set.has(c.value));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      toast("Turma carregada para edição.", "info");
+    }
+
+    async function salvarTurma() {
+      const id = (document.getElementById("t_id").value || "").trim().toUpperCase();
+      if (!id) return toast("Código obrigatório", "erro");
+      const discs = discsSelecionadas();
+      const obj = {
+        id,
+        nome: document.getElementById("t_nome").value.trim() || id,
+        serie: document.getElementById("t_serie").value.trim(),
+        turno: document.getElementById("t_turno").value,
+        composicao: document.getElementById("t_comp").value,
+        disciplinas: discs,
+        ano: 2026,
+        ativa: true
+      };
+      try {
+        await fbPut(PATH.turmas + "/" + id, obj);
+        turmas[id] = obj;
+        await registrarHistorico("turma", "Turma " + id, { qtdDisc: discs.length });
+        toast("Turma salva com " + discs.length + " disciplina(s).", "sucesso");
+        editId = null;
+        document.getElementById("t_id").readOnly = false;
+        document.getElementById("t_id").value = "";
+        document.getElementById("t_nome").value = "";
+        document.getElementById("t_serie").value = "";
+        marcarTodasDisc(false);
+        render();
+      } catch(e){ toast(e.message,"erro"); }
+    }
+
+    async function excluir(id) {
+      if (!confirm("Excluir turma " + id + "?")) return;
+      try {
+        await fbDelete(PATH.turmas + "/" + id);
+        delete turmas[id];
+        render();
+        toast("Excluída.", "info");
+      } catch(e){ toast(e.message,"erro"); }
+    }
+
+    function expTurmas() {
+      exportarCSV("turmas_2026.csv", ["Código","Nome","Série","Turno","Composição","Disciplinas"],
+        Object.values(turmas).map(t => [t.id, t.nome, t.serie, t.turno, t.composicao, (t.disciplinas||[]).join("|")]));
+    }
+
+    function imprimirTurmas() {
+      const rows = Object.values(turmas).map(t => {
+        const ds = (t.disciplinas||[]).map(id => (disciplinas[id]||{}).nome || id).join(", ");
+        return `<tr><td>${t.id}</td><td>${t.nome||""}</td><td>${t.serie||""}</td><td>${t.turno||""}</td><td>${t.composicao||""}</td><td>${ds}</td></tr>`;
+      }).join("");
+      imprimirComLogo("Turmas " + ANO_LETIVO, `
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr>
+            <th style="border:1px solid #333;padding:4px;background:#e8eef5">Cód</th>
+            <th style="border:1px solid #333;padding:4px;background:#e8eef5">Nome</th>
+            <th style="border:1px solid #333;padding:4px;background:#e8eef5">Série</th>
+            <th style="border:1px solid #333;padding:4px;background:#e8eef5">Turno</th>
+            <th style="border:1px solid #333;padding:4px;background:#e8eef5">Composição</th>
+            <th style="border:1px solid #333;padding:4px;background:#e8eef5">Disciplinas</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin(["Secretaria","Gestor","Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Turmas", "Secretaria · Ano 2026");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      if (typeof aplicarNavSec === "function") aplicarNavSec("sec-turmas.html");
+      load();
+    });
+  </script>
+</body>
+</html>

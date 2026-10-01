@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Menu Sistema</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .siap-menu-wrap { max-width: 980px; margin: 20px auto; padding: 0 16px 40px; }
+    .siap-menu-card {
+      background: #fff;
+      border: 1px solid #b8c4d4;
+      border-radius: 4px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      overflow: hidden;
+    }
+    .siap-menu-top {
+      background: linear-gradient(90deg, #0d3a66, #1a5f9e);
+      color: #fff;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .siap-menu-top .ico {
+      width: 52px; height: 52px; background: #fff; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; border: 1px solid #c5d0de;
+    }
+    .siap-menu-top .ico img, .siap-menu-top .ico svg { width: 40px; height: 40px; }
+    .siap-menu-top h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: .5px; }
+    .siap-menu-top p { margin: 2px 0 0; font-size: 13px; opacity: .92; }
+    .siap-menu-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      min-height: 280px;
+    }
+    .siap-menu-col {
+      padding: 18px 20px 22px;
+      border-right: 1px solid #d0d8e4;
+    }
+    .siap-menu-col:last-child { border-right: none; }
+    .siap-menu-col h3 {
+      font-size: 14px; color: #0d3a66; margin: 0 0 10px;
+      padding-bottom: 6px; border-bottom: 2px solid #1a5f9e;
+      font-weight: 700;
+    }
+    .siap-menu-col ul { list-style: none; margin: 0; padding: 0; }
+    .siap-menu-col li { margin: 0 0 2px; }
+    .siap-menu-col a {
+      display: block; padding: 6px 8px; font-size: 13px; color: #1a3a5c;
+      text-decoration: none; border-radius: 3px; border-left: 3px solid transparent;
+    }
+    .siap-menu-col a:hover {
+      background: #eef5fc; color: #1a5f9e; border-left-color: #1a5f9e;
+    }
+    .siap-menu-col a.destaque {
+      font-weight: 700; color: #0d3a66; background: #f0f6fc;
+    }
+    .siap-menu-col a.destaque::before { content: "● "; color: #1a5f9e; font-size: 9px; }
+    .siap-boas {
+      background: #fff; border: 1px solid #b8c4d4; border-radius: 4px;
+      padding: 12px 16px; margin-bottom: 14px;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+      font-size: 13px;
+    }
+    .siap-boas strong { color: #0d3a66; }
+    @media (max-width: 800px) {
+      .siap-menu-body { grid-template-columns: 1fr; }
+      .siap-menu-col { border-right: none; border-bottom: 1px solid #d0d8e4; }
+    }
+  </style>
+</head>
+<body>
+  <div id="topo"></div>
+  <div class="siap-menu-wrap">
+    <div class="siap-boas">
+      <div>
+        Bem-vindo(a), <strong id="boasVindas"></strong>
+        — Perfil: <strong id="perfilUser"></strong>
+        <span style="color:#666"> · CRE Águas Lindas de Goiás</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="search" id="buscaMenu" placeholder="Buscar: nome, ação, função..." aria-label="Buscar no menu" style="padding:7px 12px;border:1px solid #b8c4d4;border-radius:5px;min-width:220px;font-size:13px" oninput="filtrarMenu()" />
+      </div>
+    </div>
+
+    <div class="siap-menu-card">
+      <div class="siap-menu-top">
+        <div class="ico">
+          <img src="icone-menu.svg" alt="Menu" width="40" height="40"
+               onerror="this.outerHTML='<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 64 64&quot; width=&quot;40&quot; height=&quot;40&quot;><rect x=&quot;6&quot; y=&quot;8&quot; width=&quot;52&quot; height=&quot;38&quot; rx=&quot;3&quot; fill=&quot;#1a5f9e&quot;/><rect x=&quot;10&quot; y=&quot;12&quot; width=&quot;44&quot; height=&quot;28&quot; fill=&quot;#e8f1f8&quot;/><path d=&quot;M22 46h20l4 8H18l4-8z&quot; fill=&quot;#1a5f9e&quot;/></svg>'" />
+        </div>
+        <div>
+          <h1>SIGEP</h1>
+          <p>Sistema de Gerenciamento Pedagógico · escolha um módulo</p>
+        </div>
+      </div>
+      <div class="siap-menu-body" id="menuCols" role="navigation" aria-label="Módulos do sistema"></div>
+    </div>
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    /* Menus clássicos SIGEP: 3 colunas — Configurações | Operações | Relatórios */
+    const MENUS = {
+      Professor: {
+        "Configurações": [
+          { t: "Alterar minha senha", href: "conta.html" }
+        ],
+        "Operações": [
+          { t: "Diário do Professor (notas · frequência · planejamento)", href: "diario-inicio.html", d: true },
+          { t: "Prova de Bloco", href: "bloco.html" }
+        ],
+        "Consultas": [
+          { t: "Exportar notas (CSV)", href: "relatorios.html" }
+        ]
+      },
+      Secretaria: {
+        "Configurações": [
+          { t: "Hub da Secretaria", href: "secretaria.html", d: true },
+          { t: "Turmas", href: "sec-turmas.html" },
+          { t: "Alunos", href: "sec-alunos.html" },
+                    { t: "Professores", href: "sec-professores.html" },
+          { t: "Disciplinas", href: "sec-disciplinas.html" },
+          { t: "Vínculos", href: "sec-vinculos.html" },
+          { t: "Alterar Senha", href: "conta.html" }
+        ],
+        "Operações": [
+          { t: "Chamada Escolar", href: "chamada-diaria.html", d: true },
+          { t: "Frequência por Disciplina", href: "freq-escola.html" },
+          { t: "Lista piloto da Turma", href: "lista-piloto.html" },
+          { t: "Movimentação de Alunos", href: "sec-movimentacao.html" },
+          { t: "Documentos e Advertências", href: "sec-documentos.html", d: true },
+          { t: "Alvarás de Bloco", href: "sec-alvaras.html" },
+          { t: "Provas de Bloco (relação)", href: "sec-blocos.html" },
+          { t: "Prova de Bloco", href: "bloco.html" },
+          { t: "Turmas Arquivadas", href: "sec-antigas.html" }
+        ],
+        "Relatórios": [
+          { t: "Painel de Gerenciamento", href: "painel.html", d: true },
+          { t: "Boletim Escolar", href: "boletim.html" },
+          { t: "Relatórios e Exportação", href: "relatorios.html" },
+          { t: "Histórico", href: "sec-historico.html" }
+        ]
+      },
+      Coordenacao: {
+        "Configurações": [
+          { t: "Alterar senha", href: "conta.html" }
+        ],
+        "Operações": [
+          { t: "Diaŕio de bloco", href: "sec-alvaras.html", d: true },
+          { t: "Provas de Bloco (relação)", href: "sec-blocos.html" },
+          { t: "Prova de Bloco", href: "bloco.html" },
+          { t: "Chamada Escolar", href: "chamada-diaria.html" },
+          { t: "Diário do Professor", href: "diario-inicio.html" },
+          { t: "Frequência Escolar", href: "freq-escola.html" },
+          { t: "Lista Piloto", href: "lista-piloto.html" }
+        ],
+        "Relatórios": [
+          { t: "Relatórios", href: "relatorios.html" },
+          { t: "Boletins", href: "boletim.html" },
+          { t: "Histórico", href: "sec-historico.html" }
+        ]
+      },
+      Gestor: {
+        "Configurações": [
+          { t: "Hub da Secretaria", href: "secretaria.html", d: true },
+          { t: "Cadastros (turmas, alunos…)", href: "secretaria.html" },
+          { t: "Alterar Senha", href: "conta.html" }
+        ],
+        "Operações": [
+          { t: "Chamada diária (escola)", href: "chamada-diaria.html", d: true },
+          { t: "Alvarás", href: "sec-alvaras.html" },
+          { t: "Prova de Bloco", href: "bloco.html" },
+          { t: "Diário do professor", href: "diario-inicio.html" },
+          { t: "Frequência escolar", href: "freq-escola.html" },
+          { t: "Lista piloto", href: "lista-piloto.html" },
+          { t: "Movimentação", href: "sec-movimentacao.html" },
+          { t: "Documentos e advertências", href: "sec-documentos.html" }
+        ],
+        "Relatórios": [
+          { t: "Painel gerencial", href: "painel.html", d: true },
+          { t: "Boletins", href: "boletim.html" },
+          { t: "Relatórios", href: "relatorios.html" },
+          { t: "Histórico", href: "sec-historico.html" }
+        ]
+      }
+    };
+
+    let menuAtual = {};
+    function filtrarMenu() {
+      const q = (document.getElementById("buscaMenu").value || "").toLowerCase().trim();
+      const cols = document.querySelectorAll(".siap-menu-col");
+      cols.forEach(col => {
+        const items = col.querySelectorAll("li");
+        let visible = 0;
+        items.forEach(li => {
+          const txt = (li.textContent || "").toLowerCase();
+          const show = !q || txt.includes(q);
+          li.style.display = show ? "" : "none";
+          if (show) visible++;
+        });
+        col.style.display = visible || !q ? "" : "none";
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin();
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("MENU SISTEMA", "Colégio Estadual Maria do Carmo Lima");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      document.getElementById("boasVindas").textContent = u.nome;
+      document.getElementById("perfilUser").textContent = u.perfil;
+
+      const m = MENUS[u.perfil] || MENUS.Professor;
+      menuAtual = m;
+      document.getElementById("menuCols").innerHTML = Object.keys(m).map(col => `
+        <div class="siap-menu-col">
+          <h3>${col}</h3>
+          <ul>${m[col].map(i =>
+            `<li><a href="${i.href}" class="${i.d ? "destaque" : ""}">${i.t}</a></li>`
+          ).join("")}</ul>
+        </div>`).join("");
+    });
+  </script>
+</body>
+</html>

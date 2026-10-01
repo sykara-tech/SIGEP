@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Turmas Antigas</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="topo"></div>
+  <nav class="nav-sec">
+    <a href="secretaria.html">Hub</a>
+    <a href="sec-turmas.html">Turmas</a>
+    <a href="sec-alunos.html">Alunos</a>
+    <a href="sec-professores.html">Professores</a>
+    <a href="sec-disciplinas.html">Disciplinas</a>
+    <a href="sec-vinculos.html">Vínculos</a>
+    <a href="sec-movimentacao.html">Movimentação</a>
+    <a href="sec-alvaras.html">Alvarás</a>
+    <a href="sec-antigas.html" class="ativa">Antigas</a>
+    <a href="sec-historico.html">Histórico</a>
+  </nav>
+  <main class="conteudo">
+
+<div class="card">
+  <div class="card-header"><h2>Turmas Antigas (por ano)</h2>
+    <button class="btn btn-aviso" onclick="arquivar()">Arquivar turma vigente</button></div>
+  <div class="form-grid">
+    <div><label>Turma vigente</label><select id="arq_turma"></select></div>
+    <div><label>Ano arquivo</label><input id="arq_ano" type="number" value="2025" /></div>
+  </div>
+  <div style="padding:0 16px 16px;overflow-x:auto"><table class="tabela-cad"><thead><tr><th>ID</th><th>Nome</th><th>Ano</th><th>Arquivada</th></tr></thead><tbody id="tb"></tbody></table></div>
+</div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script src="sec-common.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin(["Secretaria", "Gestor", "Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Turmas Antigas", "Secretaria · Ano 2026");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      if (typeof aplicarNavSec === "function") aplicarNavSec("sec-antigas.html");
+      if (typeof initPage === "function") initPage("antigas");
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Relatórios</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .rel-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; padding:8px 0; }
+    .rel-card {
+      background:#fff; border:1px solid var(--borda); border-radius:8px; padding:18px;
+      box-shadow:0 1px 4px rgba(0,0,0,.06); cursor:pointer; transition:box-shadow .15s;
+    }
+    .rel-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.12); border-color:var(--azul-siap); }
+    .rel-card h3 { font-size:15px; color:var(--azul-escuro); margin-bottom:6px; }
+    .rel-card p { font-size:12.5px; color:#666; line-height:1.4; }
+    .rel-result { margin-top:16px; }
+    .rel-result table { width:100%; border-collapse:collapse; font-size:13px; }
+    .rel-result th { background:var(--azul-siap); color:#fff; padding:8px; text-align:left; }
+    .rel-result td { border:1px solid var(--borda); padding:7px 8px; }
+    .rel-result tr:nth-child(even) { background:#f8fafc; }
+  </style>
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-esquerda">
+      <button class="btn-menu-sistema" onclick="location.href='menu.html'">☰ Menu</button>
+      <div class="logo-siap">SIGEP</div>
+      <div><h1>Relatórios e Exportação</h1><div class="escola">520 - Colégio Estadual</div></div>
+    </div>
+    <div class="topo-direita">
+      <div id="dataTopo"></div>
+      <div><span id="nomeUsuario"></span> <button class="btn-sair" onclick="sair()">Sair</button></div>
+    </div>
+  </header>
+
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-header"><h2>Relatórios disponíveis</h2></div>
+      <div style="padding:16px">
+        <div class="rel-grid">
+          <div class="rel-card" onclick="relTurmas()">
+            <h3>Lista de Turmas</h3>
+            <p>Todas as turmas cadastradas com série, turno e composição. Exportável em CSV.</p>
+          </div>
+          <div class="rel-card" onclick="relAlunos()">
+            <h3>Lista de Alunos</h3>
+            <p>Alunos por turma, matrícula e status (Normal / Transferido).</p>
+          </div>
+          <div class="rel-card" onclick="relProfessores()">
+            <h3>Professores</h3>
+            <p>Cadastro de professores e logins vinculados.</p>
+          </div>
+          <div class="rel-card" onclick="relDisciplinas()">
+            <h3>Disciplinas</h3>
+            <p>Componentes curriculares e carga horária.</p>
+          </div>
+          <div class="rel-card" onclick="relVinculos()">
+            <h3>Vínculos Homologados</h3>
+            <p>Professor × Turma × Disciplina no ano letivo.</p>
+          </div>
+          <div class="rel-card" onclick="relNotas()">
+            <h3>Notas do Diário</h3>
+            <p>Exporta notas do diário (turma/disciplina/bimestre selecionados abaixo).</p>
+          </div>
+        </div>
+
+        <div style="margin-top:20px;padding:14px;background:#f8fafc;border-radius:6px;border:1px solid var(--borda)">
+          <strong style="font-size:13px">Filtro para relatório de notas</strong>
+          <div class="form-grid" style="margin-top:10px">
+            <div><label style="font-size:11px;font-weight:700;color:#555">Turma</label>
+              <select id="r_turma" style="width:100%;padding:7px;border:1px solid var(--borda);border-radius:4px"></select></div>
+            <div><label style="font-size:11px;font-weight:700;color:#555">Disciplina</label>
+              <select id="r_disc" style="width:100%;padding:7px;border:1px solid var(--borda);border-radius:4px"></select></div>
+            <div><label style="font-size:11px;font-weight:700;color:#555">Bimestre</label>
+              <select id="r_bim" style="width:100%;padding:7px;border:1px solid var(--borda);border-radius:4px">
+                <option value="1">1º</option><option value="2" selected>2º</option>
+                <option value="3">3º</option><option value="4">4º</option>
+              </select></div>
+          </div>
+        </div>
+
+        <div class="rel-result" id="relResult"></div>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let cache = {};
+
+    async function load() {
+      try {
+        cache.turmas = (await fbGet(PATH.turmas)) || {};
+        cache.alunos = (await fbGet(PATH.alunos)) || {};
+        cache.professores = (await fbGet(PATH.professores)) || {};
+        cache.disciplinas = (await fbGet(PATH.disciplinas)) || {};
+        cache.vinculos = (await fbGet(PATH.vinculos)) || {};
+      } catch (e) {
+        toast("Erro ao carregar: " + e.message, "erro");
+        cache = { turmas:{}, alunos:{}, professores:{}, disciplinas:{}, vinculos:{} };
+      }
+      document.getElementById("r_turma").innerHTML =
+        Object.values(cache.turmas).map(t => `<option value="${t.id}">${t.nome}</option>`).join("") || "<option>1B</option>";
+      document.getElementById("r_disc").innerHTML =
+        Object.values(cache.disciplinas).map(d => `<option value="${d.id}">${d.codigo || d.id} — ${d.nome}</option>`).join("") || "<option value='LP'>LP</option>";
+    }
+
+    function showTable(titulo, headers, rows, csvName) {
+      const el = document.getElementById("relResult");
+      el.innerHTML = `
+        <div class="card" style="margin-top:8px">
+          <div class="card-header">
+            <h2>${titulo} (${rows.length})</h2>
+            <button class="btn btn-secundario" onclick='exportarCSV("${csvName}", ${JSON.stringify(headers)}, ${JSON.stringify(rows)})'>Exportar CSV</button>
+          </div>
+          <div style="overflow-x:auto;padding:12px">
+            <table>
+              <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+              <tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c ?? ""}</td>`).join("")}</tr>`).join("")}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function relTurmas() {
+      const rows = Object.values(cache.turmas).map(t => [t.id, t.nome, t.serie, t.turno, t.composicao, t.ano]);
+      showTable("Turmas", ["ID","Nome","Série","Turno","Composição","Ano"], rows, "rel_turmas.csv");
+    }
+    function relAlunos() {
+      const rows = Object.values(cache.alunos).map(a => [a.matricula, a.nome, a.turma, a.status]);
+      showTable("Alunos", ["Matrícula","Nome","Turma","Status"], rows, "rel_alunos.csv");
+    }
+    function relProfessores() {
+      const rows = Object.values(cache.professores).map(p => [p.id, p.nome, p.cpf, p.usuario]);
+      showTable("Professores", ["ID","Nome","CPF","Login"], rows, "rel_professores.csv");
+    }
+    function relDisciplinas() {
+      const rows = Object.values(cache.disciplinas).map(d => [d.id, d.nome, d.area, d.carga]);
+      showTable("Disciplinas", ["Código","Nome","Área","Carga"], rows, "rel_disciplinas.csv");
+    }
+    function relVinculos() {
+      const rows = Object.values(cache.vinculos).map(v => {
+        const pn = (cache.professores[v.professorId]||{}).nome || v.professorId;
+        const tn = (cache.turmas[v.turmaId]||{}).nome || v.turmaId;
+        const dn = (cache.disciplinas[v.disciplinaId]||{}).nome || v.disciplinaId;
+        return [pn, tn, dn, v.ano];
+      });
+      showTable("Vínculos", ["Professor","Turma","Disciplina","Ano"], rows, "rel_vinculos.csv");
+    }
+    async function relNotas() {
+      const turma = document.getElementById("r_turma").value;
+      const disc = document.getElementById("r_disc").value;
+      const bim = document.getElementById("r_bim").value;
+      const path = PATH.diario(ANO_LETIVO, turma, disc, bim) + "/diario";
+      try {
+        const data = await fbGet(path);
+        if (!data || !data.alunos) {
+          toast("Nenhum diário encontrado para este filtro.", "info");
+          return;
+        }
+        const cols = data.colunasLivres || [];
+        const headers = ["Aluno", ...cols, "Bloco", "Média Bim", "Rec", "Faltas", "Média Final", "Status"];
+        const rows = Object.values(data.alunos).map(a => [
+          a.nome,
+          ...cols.map(c => a.livres?.[c] ?? ""),
+          a.bloco ?? "", a.media_bimestral ?? "", a.recuperacao ?? "", a.faltas ?? 0,
+          a.media_final ?? "", a.status ?? ""
+        ]);
+        showTable(`Notas — ${turma} / ${disc} / ${bim}º bim`, headers, rows, `notas_${turma}_${bim}.csv`);
+      } catch (e) {
+        toast("Erro: " + e.message, "erro");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin();
+      if (!u) return;
+      document.getElementById("nomeUsuario").textContent = u.nome;
+      document.getElementById("dataTopo").textContent = dataHoje();
+      load();
+    });
+  </script>
+</body>
+</html>

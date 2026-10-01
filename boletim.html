@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Boletim Escolar</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="topo" class="no-print"></div>
+  <section class="filtros no-print">
+    <div class="filtro-grupo"><label>Turma</label><select id="bol_turma" onchange="loadAlunos()"></select></div>
+    <div class="filtro-grupo"><label>Aluno</label><select id="bol_aluno"></select></div>
+    <div class="filtro-grupo"><label>&nbsp;</label><button class="btn btn-primario" onclick="gerar()">Gerar Boletim</button></div>
+    <div class="filtro-grupo"><label>&nbsp;</label><button class="btn btn-secundario" onclick="window.print()">Imprimir</button></div>
+  </section>
+  <main class="conteudo">
+    <div id="area"><p class="loading">Selecione o aluno e gere o boletim.</p></div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let cache = {};
+
+    /** Disciplinas da turma: vínculos (Prof×Turma×Disc) + lista opcional na turma */
+    function disciplinasDaTurma(turmaId) {
+      const ids = new Set();
+      Object.values(cache.vinculos || {}).forEach(v => {
+        if (v.turmaId === turmaId && v.disciplinaId) ids.add(v.disciplinaId);
+      });
+      const t = (cache.turmas || {})[turmaId];
+      if (t && Array.isArray(t.disciplinas)) t.disciplinas.forEach(id => ids.add(id));
+      let list = [...ids].map(id => cache.disciplinas[id]).filter(Boolean);
+      return list.sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
+    }
+
+    async function init() {
+      const u = exigirLogin();
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Boletim Escolar", "Portal do Aluno" );
+      document.getElementById("dataTopo").textContent = dataHoje();
+      try {
+        const [turmas, alunos, disciplinas, vinculos] = await Promise.all([
+          fbGet(PATH.turmas), fbGet(PATH.alunos), fbGet(PATH.disciplinas), fbGet(PATH.vinculos)
+        ]);
+        cache.turmas = turmas || {};
+        cache.alunos = alunos || {};
+        cache.disciplinas = disciplinas || {};
+        cache.vinculos = vinculos || {};
+      } catch (e) { toast(e.message, "erro"); }
+      document.getElementById("bol_turma").innerHTML =
+        Object.values(cache.turmas).map(t => `<option value="${t.id}">${t.nome}</option>`).join("") || "<option>2A</option>";
+      loadAlunos();
+    }
+
+    function loadAlunos() {
+      const turma = document.getElementById("bol_turma").value;
+      const list = Object.values(cache.alunos || {}).filter(a => a.turma === turma && a.status !== "Transferido");
+      document.getElementById("bol_aluno").innerHTML =
+        list.map(a => `<option value="${a.id}">${a.nome}</option>`).join("") || "<option>—</option>";
+    }
+
+    async function gerar() {
+      const alunoId = document.getElementById("bol_aluno").value;
+      const aluno = (cache.alunos || {})[alunoId];
+      if (!aluno) return toast("Selecione o aluno", "erro");
+      const turmaId = document.getElementById("bol_turma").value;
+      const turma = (cache.turmas || {})[turmaId] || {};
+      const discs = disciplinasDaTurma(turmaId);
+      if (!discs.length) return toast("Nenhuma disciplina vinculada a esta turma. Cadastre vínculos (Prof × Turma × Disc) na Secretaria.", "erro");
+
+      mostrarCarregando("Montando boletim...");
+      const bims = ["1", "2", "3", "4"];
+      let linhas = [];
+      let totalFaltas = 0;
+
+      for (const disc of discs) {
+        const row = { nome: disc.nome, bims: {}, ma: null, mf: null, tf: 0 };
+        for (const b of bims) {
+          try {
+            const data = await fbGet(PATH.diario(ANO_LETIVO, turmaId, disc.id, b) + "/diario");
+            if (data && data.alunos && data.alunos[alunoId]) {
+              const a = data.alunos[alunoId];
+              const nota = a.media_final ?? a.media_bimestral ?? null;
+              const faltas = a.faltas || 0;
+              row.bims[b] = { nota, faltas };
+              row.tf += faltas;
+              totalFaltas += faltas;
+            } else {
+              row.bims[b] = { nota: null, faltas: null };
+            }
+          } catch (e) {
+            row.bims[b] = { nota: null, faltas: null };
+          }
+        }
+        const notasBim = bims.map(b => row.bims[b].nota).filter(n => n != null);
+        if (notasBim.length) {
+          const soma4 = bims.reduce((s, b) => s + (row.bims[b].nota != null ? row.bims[b].nota : 0), 0);
+          row.ma = soma4 / 4;
+          row.mf = row.ma;
+        }
+        linhas.push(row);
+      }
+      ocultarCarregando();
+
+      const emissao = new Date().toLocaleDateString("pt-BR");
+      const cel = (v) => v == null || v === "" ? "—" : (typeof v === "number" ? fmtNota(v) : v);
+
+      document.getElementById("area").innerHTML = `
+      <div class="bol-oficial">
+        <div class="bol-cab">
+          <img src="${LOGO_GO}" alt="Goiás" onerror="this.style.display='none'" />
+          <div class="esq">
+            <h1>ESTADO DE GOIÁS</h1>
+            <p>SECRETARIA DE ESTADO DA EDUCAÇÃO</p>
+            <p>COLÉGIO ESTADUAL MARIA DO CARMO LIMA — CÓD. 520</p>
+          </div>
+          <div class="dir">
+            <h2>BOLETIM ESCOLAR</h2>
+            <p>${turma.composicao || "Ensino Médio"}</p>
+            <p>ANO: ${ANO_LETIVO}</p>
+          </div>
+        </div>
+        <div class="bol-dados">
+          <div><strong>NOME DO ALUNO(A):</strong> ${aluno.nome}</div>
+          <div><strong>SEXO:</strong> ${aluno.sexo || "—"}</div>
+          <div><strong>N. CHAM.:</strong> ${aluno.nCham || "—"}</div>
+          <div><strong>MATRÍCULA:</strong> ${aluno.matricula || aluno.id}</div>
+          <div><strong>CÓD. INEP:</strong> ${aluno.inep || "—"}</div>
+          <div><strong>EMISSÃO:</strong> ${emissao}</div>
+          <div><strong>TURNO:</strong> ${aluno.turno || turma.turno || "—"}</div>
+          <div><strong>TURMA:</strong> ${turma.nome || turmaId}</div>
+          <div><strong>SÉRIE:</strong> ${turma.serie || "—"}</div>
+        </div>
+        <table class="bol-table">
+          <thead>
+            <tr>
+              <th rowspan="2">COMPONENTES CURRICULARES</th>
+              <th colspan="2">1º BIM.</th>
+              <th colspan="2">2º BIM.</th>
+              <th colspan="2">3º BIM.</th>
+              <th colspan="2">4º BIM.</th>
+              <th rowspan="2">MA</th>
+              <th rowspan="2">MÉDIA FINAL</th>
+              <th rowspan="2">FALTAS</th>
+            </tr>
+            <tr>
+              <th>N</th><th>F</th><th>N</th><th>F</th><th>N</th><th>F</th><th>N</th><th>F</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${linhas.map(l => `
+              <tr>
+                <td class="disc">${l.nome}</td>
+                ${["1","2","3","4"].map(b => `
+                  <td>${cel(l.bims[b].nota)}</td>
+                  <td>${l.bims[b].faltas != null && l.bims[b].faltas !== 0 ? l.bims[b].faltas : "—"}</td>
+                `).join("")}
+                <td>${cel(l.ma)}</td>
+                <td>${cel(l.mf)}</td>
+                <td>${l.tf || "—"}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        <div class="bol-rodape">
+          <div><strong>% Frequência</strong>${totalFaltas > 0 ? Math.max(0, Math.round(100 - (totalFaltas / Math.max(linhas.length * 20, 1)) * 100)) + "%" : "100%"}</div>
+          <div><strong>Total de Faltas</strong>${totalFaltas || "0"}</div>
+          <div><strong>Faltas Justificadas</strong>—</div>
+          <div><strong>Resultado Final</strong>Cursando</div>
+        </div>
+    
+      </div>`;
+      toast("Boletim: " + linhas.length + " componente(s) desta turma.", "sucesso");
+    }
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>

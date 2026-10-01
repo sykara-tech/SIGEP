@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Matrícula e Homologação</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="topo"></div>
+  <nav class="nav-sec">
+    <a href="secretaria.html">Hub</a>
+    <a href="sec-turmas.html">Turmas</a>
+    <a href="sec-alunos.html">Alunos</a>
+    <a href="sec-professores.html">Professores</a>
+    <a href="sec-disciplinas.html">Disciplinas</a>
+    <a href="sec-vinculos.html">Vínculos</a>
+    <a href="sec-movimentacao.html">Movimentação</a>
+    <a href="sec-alvaras.html">Alvarás</a>
+    <a href="sec-historico.html">Histórico</a>
+  </nav>
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-header">
+        <h2>Matrícula e Homologação</h2>
+        <div class="acoes">
+          <button class="btn btn-secundario" onclick="atualizar()">Atualizar dados</button>
+          <button class="btn btn-sucesso" onclick="novaMatricula()">Nova matrícula</button>
+        </div>
+      </div>
+      <div class="sub-sec">
+        A matrícula é <strong>gerada automaticamente</strong>. O estudante permanece como <em>Pendente</em> até a homologação na turma.
+        Utilize a pesquisa para localizar o registro e clique no nome para homologar ou movimentar.
+      </div>
+      <div class="busca-box">
+        <input type="search" id="busca" placeholder="Pesquisar estudante..." oninput="filtrar()" />
+      </div>
+      <div style="padding:0 16px 16px;overflow-x:auto">
+        <table class="tabela-cad">
+          <thead><tr><th>Matrícula</th><th>Nome</th><th>Turma</th><th>Situação</th><th>Ação</th></tr></thead>
+          <tbody id="tb"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let alunos = {}, turmas = {};
+    async function atualizar() {
+      mostrarCarregando("Atualizando matrículas...");
+      try {
+        alunos = (await fbGet(PATH.alunos)) || {};
+        turmas = (await fbGet(PATH.turmas)) || {};
+        filtrar();
+        toast("Dados atualizados.", "sucesso");
+      } catch (e) { toast(e.message, "erro"); }
+      ocultarCarregando();
+    }
+    function filtrar() {
+      const q = (document.getElementById("busca").value || "").toLowerCase();
+      const list = Object.values(alunos).filter(a => !q || [a.nome,a.matricula,a.turma].join(" ").toLowerCase().includes(q))
+        .sort((a,b) => String(a.nome).localeCompare(b.nome));
+      document.getElementById("tb").innerHTML = list.map(a => `
+        <tr>
+          <td>${a.matricula}</td>
+          <td><a class="link-aluno" href="sec-alunos.html">${a.nome}</a></td>
+          <td>${(turmas[a.turma]||{}).nome || a.turma}</td>
+          <td><span class="badge-status ${a.status==="Normal"?"badge-normal":"badge-pendente"}">${a.status}</span></td>
+          <td>${!a.homologado ? `<button class="btn btn-sucesso btn-sm" onclick="homologar('${a.id}')">Homologar</button>` : "—"}</td>
+        </tr>`).join("") || "<tr><td colspan='5'>Nenhum registro.</td></tr>";
+    }
+    async function homologar(id) {
+      const a = alunos[id]; if (!a) return;
+      a.homologado = true; a.status = "Normal";
+      mostrarCarregando("Homologando...");
+      try {
+        await fbPut(PATH.alunos+"/"+id, a);
+        await registrarHistorico("homologacao", "Homologação: "+a.nome, {id});
+        toast("Matrícula homologada.", "sucesso");
+        filtrar();
+      } catch (e) { toast(e.message, "erro"); }
+      ocultarCarregando();
+    }
+    async function novaMatricula() {
+      location.href = "sec-alunos.html";
+    }
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin(["Secretaria","Gestor","Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Matrícula e Homologação", "Secretaria Escolar");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      if (typeof aplicarNavSec === "function") aplicarNavSec("sec-matriculas.html");
+      atualizar();
+    });
+  </script>
+</body>
+</html>

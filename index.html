@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Área de Acesso</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="login-page">
+  <div class="login-card">
+    <div class="login-esquerda">
+      <div>
+        <h1>SIGEP</h1>
+        <p class="subtitulo">Sistema de Gerenciamento Pedagógico</p>
+      </div>
+      <div class="login-logos">
+        <img class="logo-go" src="https://repositorioweb.educacao.go.gov.br/logos/logo-gov-colorida.png" alt="Estado de Goiás" style="background:#fff;border-radius:6px;padding:4px 8px" onerror="this.style.display='none'" />
+      </div>
+    </div>
+    <div class="login-direita">
+      <div class="badge-acesso">ÁREA DE ACESSO</div>
+      <div class="login-icone" style="text-align:center">
+        <img src="https://siap.educacao.go.gov.br/img/corujasite.png" alt="SIGEP" style="height:72px;object-fit:contain" onerror="this.style.display=\'none\'" />
+      </div>
+      <form class="login-form" onsubmit="return fazerLogin(event)" aria-label="Formulário de acesso ao SIGEP">
+        <label>Usuário</label>
+        <input type="text" id="usuario" required placeholder="CPF ou login" autocomplete="username" />
+        <label>Senha</label>
+        <input type="password" id="senha" required autocomplete="current-password" />
+        <p class="login-esqueci">Esqueceu a senha? <a href="#" onclick="alert('Redefina no Portal Educa.');return false;">Clique aqui</a></p>
+        <div class="login-captcha">
+          <div class="codigo" id="captchaCodigo" aria-label="Código de segurança"></div>
+          <p class="dica">Digite o código de segurança acima</p>
+          <input type="text" id="captchaInput" required style="text-align:center;letter-spacing:2px" />
+        </div>
+        <div class="login-erro" id="loginErro" role="alert" aria-live="assertive"></div>
+        <button type="submit" class="btn-entrar">Entrar</button>
+      </form>
+      <div class="login-rodape">
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      gerarCaptcha();
+      if (getUser()) location.href = "menu.html";
+    });
+  </script>
+</body>
+</html>
