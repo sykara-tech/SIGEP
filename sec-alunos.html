@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SIGEP — Cadastro de Alunos</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1e40af" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SIGEP" />
+  <link rel="apple-touch-icon" href="icone-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icone-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icone-512.png" />
 </head>
 <body>
   <div id="topo"></div>
@@ -330,7 +339,17 @@
           <tr><td><b>Homologado</b></td><td>${a.homologado?"Sim":"Não"}</td></tr>
         </table>
         <div class="r">Emitido em ${new Date().toLocaleString("pt-BR")} · SIGEP</div>
-        <script>window.print()<\/script></body></html>`);
+        <script>window.print()<\/script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('./sw.js')
+      .then(function(reg) { console.log('[PWA] SW registrado:', reg.scope); })
+      .catch(function(err) { console.warn('[PWA] SW falhou:', err); });
+  });
+}
+</script>
+</body></html>`);
       w.document.close();
     }
     function comprovanteFreq(id) {

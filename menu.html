@@ -70,6 +70,15 @@
       .siap-menu-col { border-right: none; border-bottom: 1px solid #d0d8e4; }
     }
   </style>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1e40af" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SIGEP" />
+  <link rel="apple-touch-icon" href="icone-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icone-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icone-512.png" />
 </head>
 <body>
   <div id="topo"></div>
@@ -224,5 +233,15 @@
         </div>`).join("");
     });
   </script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('./sw.js')
+      .then(function(reg) { console.log('[PWA] SW registrado:', reg.scope); })
+      .catch(function(err) { console.warn('[PWA] SW falhou:', err); });
+  });
+}
+</script>
 </body>
 </html>

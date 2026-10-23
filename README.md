@@ -41,3 +41,11 @@ Sistema web de gestão escolar (cadastros, diário do professor, prova de bloco,
 - Para bancos de demonstração, `migrar-nascimentos-demo.html` permite preencher datas aleatórias apenas nos registros sem data. Abra a página autenticado como Secretaria, Gestor ou Coordenação, confira a quantidade e confirme a operação.
 - **Importante:** datas aleatórias são fictícias e não devem ser gravadas em cadastros reais ou documentos escolares oficiais. Para alunos reais, preencha a data confirmada nos documentos.
 - Não foi possível gravar diretamente no Firebase a partir deste ambiente, pois a conexão externa com o banco não estava disponível. O utilitário incluído executa a migração quando o sistema estiver hospedado e conectado.
+
+
+## PWA (App instalável)
+- manifest.json + service worker (sw.js) inclusos
+- Ícones: icone-192.png e icone-512.png
+- Para instalar: abra no Chrome/Safari → "Adicionar à tela inicial" / "Instalar app"
+- Funciona offline (cache das páginas e assets principais)
+- Requer HTTPS (ou localhost) para o Service Worker
