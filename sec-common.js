@@ -75,7 +75,7 @@ async function salvarAluno() {
   const id = "a_"+mat.replace(/\W/g,"");
   const st = document.getElementById("a_status").value;
   const obj = { id, nome: nome.toUpperCase(), matricula: mat, turma: document.getElementById("a_turma").value,
-    status: st, sexo: document.getElementById("a_sexo").value, nCham: parseInt(document.getElementById("a_cham").value)||0,
+    status: st, sexo: document.getElementById("a_sexo").value, dataNascimento: document.getElementById("a_nascimento")?.value || "", nCham: parseInt(document.getElementById("a_cham").value)||0,
     ano: 2026, homologado: st==="Normal" };
   C.alunos[id] = obj;
   try { await fbPut(PATH.alunos+"/"+id, obj); toast("Salvo","sucesso"); } catch(e){ toast(e.message,"erro"); }
@@ -100,7 +100,7 @@ async function matricular() {
   const mat = document.getElementById("m_mat").value.trim() || ("2026"+Math.floor(Math.random()*9000+1000));
   const id = "a_"+mat.replace(/\W/g,"");
   const obj = { id, nome: nome.toUpperCase(), matricula: mat, turma: document.getElementById("m_turma").value,
-    status: "Pendente", sexo: document.getElementById("m_sexo").value, ano: 2026, homologado: false, matriculadoEm: agoraISO() };
+    status: "Pendente", sexo: document.getElementById("m_sexo").value, dataNascimento: document.getElementById("m_nascimento")?.value || "", ano: 2026, homologado: false, matriculadoEm: agoraISO() };
   C.alunos[id] = obj;
   try { await fbPut(PATH.alunos+"/"+id, obj); await registrarHistorico("matricula","Matrícula "+nome,obj); toast("Matriculado (pendente)","sucesso"); } catch(e){ toast(e.message,"erro"); }
   document.getElementById("m_nome").value = "";

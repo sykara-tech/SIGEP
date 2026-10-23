@@ -60,6 +60,7 @@
           <div class="campo"><label>Matrícula</label><input id="f_mat" readonly /></div>
           <div class="campo"><label>Nº chamada</label><input id="f_cham" type="number" min="1" /></div>
           <div class="campo" style="grid-column:1/-1"><label>Nome completo</label><input id="f_nome" /></div>
+          <div class="campo"><label>Data de nascimento</label><input id="f_nascimento" type="date" max="2026-12-31" /></div>
           <div class="campo"><label>Sexo</label>
             <select id="f_sexo"><option>Masculino</option><option>Feminino</option></select>
           </div>
@@ -163,6 +164,7 @@
       document.getElementById("f_cham").value = a.nCham || "";
       document.getElementById("f_nome").value = a.nome || "";
       document.getElementById("f_sexo").value = a.sexo || "Masculino";
+      document.getElementById("f_nascimento").value = a.dataNascimento || a.nascimento || "";
       document.getElementById("f_turma").value = a.turma || "";
       document.getElementById("f_status").value = a.status || "Normal";
       document.getElementById("f_cep").value = a.cep || "";
@@ -216,6 +218,7 @@
         nCham: parseInt(document.getElementById("f_cham").value) || 0,
         nome: document.getElementById("f_nome").value.trim().toUpperCase(),
         sexo: document.getElementById("f_sexo").value,
+        dataNascimento: document.getElementById("f_nascimento").value,
         turma: document.getElementById("f_turma").value,
         status: document.getElementById("f_status").value,
         cep: document.getElementById("f_cep").value,
@@ -321,6 +324,7 @@
         <table>
           <tr><td><b>Matrícula</b></td><td>${a.matricula||""}</td></tr>
           <tr><td><b>Nome</b></td><td>${a.nome||""}</td></tr>
+          <tr><td><b>Data de nascimento</b></td><td>${a.dataNascimento ? new Date(a.dataNascimento+"T12:00:00").toLocaleDateString("pt-BR") : "Não informada"}</td></tr>
           <tr><td><b>Turma</b></td><td>${(turmas[a.turma]||{}).nome||a.turma||""}</td></tr>
           <tr><td><b>Situação</b></td><td>${a.status||""}</td></tr>
           <tr><td><b>Homologado</b></td><td>${a.homologado?"Sim":"Não"}</td></tr>
@@ -357,8 +361,8 @@
 
     function exportar() {
       exportarCSV("alunos_" + ANO_LETIVO + ".csv",
-        ["Matrícula","Nº","Nome","Turma","Situação","Homologado","Pai","Mãe","Cidade"],
-        listaFiltrada.map(a => [a.matricula, a.nCham, a.nome, a.turma, a.status, a.homologado?"Sim":"Não", a.pai, a.mae, a.cidade]));
+        ["Matrícula","Nº","Nome","Data de nascimento","Turma","Situação","Homologado","Pai","Mãe","Cidade"],
+        listaFiltrada.map(a => [a.matricula, a.nCham, a.nome, a.dataNascimento || "", a.turma, a.status, a.homologado?"Sim":"Não", a.pai, a.mae, a.cidade]));
     }
 
     document.addEventListener("DOMContentLoaded", () => {

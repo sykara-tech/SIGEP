@@ -33,3 +33,11 @@ Sistema web de gestão escolar (cadastros, diário do professor, prova de bloco,
 ## Observações
 - Caminhos de dados no Firebase permanecem sob o prefixo `siap/` para compatibilidade.
 - Cache local (`localStorage`) permite uso offline parcial.
+
+
+## Atualização — data de nascimento
+- O cadastro/ficha do aluno agora possui o campo **Data de nascimento** e salva o valor em `siap/alunos/{id}/dataNascimento`.
+- A data aparece na listagem de matrículas e no comprovante impresso; a exportação CSV também inclui a coluna.
+- Para bancos de demonstração, `migrar-nascimentos-demo.html` permite preencher datas aleatórias apenas nos registros sem data. Abra a página autenticado como Secretaria, Gestor ou Coordenação, confira a quantidade e confirme a operação.
+- **Importante:** datas aleatórias são fictícias e não devem ser gravadas em cadastros reais ou documentos escolares oficiais. Para alunos reais, preencha a data confirmada nos documentos.
+- Não foi possível gravar diretamente no Firebase a partir deste ambiente, pois a conexão externa com o banco não estava disponível. O utilitário incluído executa a migração quando o sistema estiver hospedado e conectado.

@@ -37,7 +37,7 @@
       </div>
       <div style="padding:0 16px 16px;overflow-x:auto">
         <table class="tabela-cad">
-          <thead><tr><th>Matrícula</th><th>Nome</th><th>Turma</th><th>Situação</th><th>Ação</th></tr></thead>
+          <thead><tr><th>Matrícula</th><th>Nome</th><th>Data de nascimento</th><th>Turma</th><th>Situação</th><th>Ação</th></tr></thead>
           <tbody id="tb"></tbody>
         </table>
       </div>
@@ -65,10 +65,11 @@
         <tr>
           <td>${a.matricula}</td>
           <td><a class="link-aluno" href="sec-alunos.html">${a.nome}</a></td>
+          <td>${a.dataNascimento ? new Date(a.dataNascimento+"T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
           <td>${(turmas[a.turma]||{}).nome || a.turma}</td>
           <td><span class="badge-status ${a.status==="Normal"?"badge-normal":"badge-pendente"}">${a.status}</span></td>
           <td>${!a.homologado ? `<button class="btn btn-sucesso btn-sm" onclick="homologar('${a.id}')">Homologar</button>` : "—"}</td>
-        </tr>`).join("") || "<tr><td colspan='5'>Nenhum registro.</td></tr>";
+        </tr>`).join("") || "<tr><td colspan='6'>Nenhum registro.</td></tr>";
     }
     async function homologar(id) {
       const a = alunos[id]; if (!a) return;
