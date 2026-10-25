@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Movimentação</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="topo"></div>
+  <nav class="nav-sec">
+    <a href="secretaria.html">Hub</a>
+    <a href="sec-turmas.html">Turmas</a>
+    <a href="sec-alunos.html">Alunos</a>
+    <a href="sec-professores.html">Professores</a>
+    <a href="sec-disciplinas.html">Disciplinas</a>
+    <a href="sec-vinculos.html">Vínculos</a>
+    <a href="sec-movimentacao.html" class="ativa">Movimentação</a>
+    <a href="sec-alvaras.html">Alvarás</a>
+    <a href="sec-antigas.html">Antigas</a>
+    <a href="sec-historico.html">Histórico</a>
+  </nav>
+  <main class="conteudo">
+
+<div class="card">
+  <div class="card-header"><h2>Movimentação de Alunos</h2></div>
+  <div class="sub-sec">Transferência, troca de turma, efetivação, remanejamento — histórico preservado.</div>
+  <div class="form-grid">
+    <div><label>Aluno</label><select id="mv_aluno"></select></div>
+    <div><label>Operação</label>
+      <select id="mv_op">
+        <option value="efetivacao">Efetivação (Pendente → Normal)</option>
+        <option value="troca">Troca de turma</option>
+        <option value="transferencia">Transferência</option>
+        <option value="remanejar">Remanejar</option>
+      </select>
+    </div>
+    <div><label>Turma destino</label><select id="mv_destino"></select></div>
+  </div>
+  <div style="padding:0 16px 16px"><button class="btn btn-aviso" onclick="mover()">Executar</button></div>
+</div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script src="sec-common.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin(["Secretaria", "Gestor", "Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Movimentação", "Secretaria · Ano 2026");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      if (typeof aplicarNavSec === "function") aplicarNavSec("sec-movimentacao.html");
+      if (typeof initPage === "function") initPage("movimentacao");
+    });
+  </script>
+</body>
+</html>

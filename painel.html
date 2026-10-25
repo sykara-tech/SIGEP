@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Painel Gerencial</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; padding:16px; }
+    .kpi {
+      background:#f8fafc; border:1px solid var(--borda); border-radius:8px; padding:14px;
+      text-align:center;
+    }
+    .kpi .n { font-size:28px; font-weight:800; color:var(--azul-escuro); line-height:1.1; }
+    .kpi .l { font-size:11px; color:#666; margin-top:4px; text-transform:uppercase; font-weight:700; }
+    .bar-row { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:12px; }
+    .bar-row .lbl { width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .bar-track { flex:1; height:10px; background:#e0e6ed; border-radius:5px; overflow:hidden; }
+    .bar-fill { height:100%; background:var(--azul-siap); border-radius:5px; }
+  </style>
+</head>
+<body>
+  <div id="topo"></div>
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-header">
+        <h2>Painel gerencial · Unidade 520 · Ano 2026</h2>
+        <div class="acoes">
+          <button class="btn btn-secundario" onclick="carregar()">Atualizar</button>
+          <button class="btn btn-secundario" onclick="location.href='menu.html'">Menu</button>
+        </div>
+      </div>
+      <div class="sub-sec">Indicadores consolidados a partir dos cadastros da secretaria. Dados em tempo real do Firebase (com cache local).</div>
+      <div class="kpi-grid" id="kpis">
+        <div class="kpi"><div class="n">—</div><div class="l">Carregando</div></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="card-header"><h2>Alunos por turma</h2></div>
+      <div style="padding:16px" id="porTurma"><p class="loading">Aguarde…</p></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="card-header"><h2>Situação das matrículas</h2></div>
+      <div style="padding:16px" id="porStatus"><p class="loading">Aguarde…</p></div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    async function carregar() {
+      mostrarCarregando("Consolidando indicadores...");
+      try {
+        const [turmas, alunos, professores, disciplinas, vinculos, alvaras] = await Promise.all([
+          fbGet(PATH.turmas), fbGet(PATH.alunos), fbGet(PATH.professores),
+          fbGet(PATH.disciplinas), fbGet(PATH.vinculos), fbGet(PATH.alvaras)
+        ]);
+        const T = turmas || {}, A = alunos || {}, P = professores || {}, D = disciplinas || {};
+        const V = vinculos || {}, AL = alvaras || {};
+        const listaA = Object.values(A);
+        const ativos = listaA.filter(a => a.status === "Normal" && a.homologado !== false);
+        const pend = listaA.filter(a => a.status === "Pendente" || a.homologado === false);
+        const transf = listaA.filter(a => a.status === "Transferido" || a.status === "Desativado");
+        const alvAbertos = Object.values(AL).filter(a => a.aberto).length;
+
+        document.getElementById("kpis").innerHTML = [
+          ["Turmas", Object.keys(T).length],
+          ["Alunos ativos", ativos.length],
+          ["Pendentes", pend.length],
+          ["Transferidos / inativos", transf.length],
+          ["Professores", Object.keys(P).length],
+          ["Disciplinas", Object.keys(D).length],
+          ["Vínculos", Object.keys(V).length],
+          ["Alvarás abertos", alvAbertos]
+        ].map(([l, n]) => `<div class="kpi"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+
+        // por turma
+        const cont = {};
+        ativos.forEach(a => { cont[a.turma] = (cont[a.turma] || 0) + 1; });
+        const max = Math.max(1, ...Object.values(cont), 1);
+        const rowsT = Object.keys(T).map(id => {
+          const n = cont[id] || 0;
+          const pct = Math.round((n / max) * 100);
+          return `<div class="bar-row">
+            <span class="lbl" title="${T[id].nome}">${T[id].nome || id}</span>
+            <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+            <strong>${n}</strong>
+          </div>`;
+        }).join("") || "<p>Nenhuma turma cadastrada. Use Inicializar Dados 2026.</p>";
+        document.getElementById("porTurma").innerHTML = rowsT;
+
+        const st = {
+          "Normal / homologado": ativos.length,
+          "Pendente": pend.length,
+          "Transferido / desativado": transf.length
+        };
+        const maxS = Math.max(1, ...Object.values(st));
+        document.getElementById("porStatus").innerHTML = Object.entries(st).map(([k, n]) => {
+          const pct = Math.round((n / maxS) * 100);
+          return `<div class="bar-row">
+            <span class="lbl">${k}</span>
+            <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+            <strong>${n}</strong>
+          </div>`;
+        }).join("");
+
+        toast("Painel atualizado.", "sucesso");
+      } catch (e) {
+        toast("Erro: " + e.message, "erro");
+        document.getElementById("kpis").innerHTML = `<div class="kpi"><div class="n">!</div><div class="l">${e.message}</div></div>`;
+      }
+      ocultarCarregando();
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin(["Secretaria", "Gestor", "Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Painel Gerencial", "Indicadores da unidade");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      carregar();
+    });
+  </script>
+</body>
+</html>

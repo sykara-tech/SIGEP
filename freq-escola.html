@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Frequência Escolar</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .freq-matrix { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .freq-matrix th, .freq-matrix td { border: 1px solid #333; padding: 3px 4px; text-align: center; }
+    .freq-matrix th { background: #e8eef5; font-weight: 700; position: sticky; top: 0; }
+    .freq-matrix td.nome { text-align: left; font-weight: 500; white-space: nowrap; }
+    .freq-matrix .F { background: #ffebee; color: #c62828; font-weight: 700; }
+    .freq-matrix .P { background: #e8f5e9; color: #2e7d32; }
+    .freq-matrix .J { background: #fff8e1; color: #f57f17; font-weight: 700; }
+    .freq-matrix .vazio { background: #fafafa; color: #bbb; }
+  </style>
+</head>
+<body>
+  <div id="topo"></div>
+  <section class="filtros">
+    <div class="filtro-grupo"><label>Turma</label><select id="fe_turma" onchange="carregar()"></select></div>
+    <div class="filtro-grupo"><label>Disciplina</label><select id="fe_disc" onchange="carregar()"></select></div>
+    <div class="filtro-grupo"><label>Bimestre</label>
+      <select id="fe_bim" onchange="carregar()">
+        <option value="1">1º</option><option value="2" selected>2º</option>
+        <option value="3">3º</option><option value="4">4º</option>
+      </select>
+    </div>
+    <div class="filtro-grupo"><label>&nbsp;</label><button class="btn btn-primario" onclick="carregar()">Consultar</button></div>
+    <div class="filtro-grupo"><label>&nbsp;</label><button class="btn btn-secundario" onclick="exportarFreq()">Exportar CSV</button></div>
+    <div class="filtro-grupo"><label>&nbsp;</label><button class="btn btn-aviso" onclick="location.href='chamada-diaria.html'">Chamada diária (justificar)</button></div>
+  </section>
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-header"><h2>Frequência escolar — visão consolidada por turma</h2></div>
+      <div class="sub-sec">
+        Matriz estilo lista piloto: alunos em ordem alfabética, datas nas colunas.
+        P = presente · F = falta · J = justificada (via chamada diária da escola).
+        A frequência por disciplina é lançada pelo professor no Diário; a chamada escolar permite justificar faltas.
+      </div>
+      <div style="padding:12px 16px;overflow-x:auto;max-height:70vh">
+        <table class="freq-matrix" id="tbMatrix">
+          <thead><tr><th>Nº</th><th>Aluno</th><th colspan="3">Selecione filtros e consulte</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    let cache = {}, freqData = {};
+    async function init() {
+      const u = exigirLogin(["Secretaria", "Gestor", "Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Frequência Escolar", "Gestão / Secretaria");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      try {
+        cache.turmas = (await fbGet(PATH.turmas)) || {};
+        cache.disciplinas = (await fbGet(PATH.disciplinas)) || {};
+        cache.alunos = (await fbGet(PATH.alunos)) || {};
+      } catch (e) { toast(e.message, "erro"); }
+      document.getElementById("fe_turma").innerHTML =
+        Object.values(cache.turmas).map(t => `<option value="${t.id}">${t.nome}</option>`).join("");
+      document.getElementById("fe_disc").innerHTML =
+        Object.values(cache.disciplinas).map(d => `<option value="${d.id}">${d.codigo || d.id} — ${d.nome}</option>`).join("");
+    }
+    async function carregar() {
+      const turma = document.getElementById("fe_turma").value;
+      const disc = document.getElementById("fe_disc").value;
+      const bim = document.getElementById("fe_bim").value;
+      const tb = document.querySelector("#tbMatrix tbody");
+      const thead = document.querySelector("#tbMatrix thead");
+      tb.innerHTML = "<tr><td colspan='5'>Carregando...</td></tr>";
+      try {
+        freqData = (await fbGet(PATH.diario(ANO_LETIVO, turma, disc, bim) + "/frequencia")) || {};
+      } catch (e) {
+        freqData = {};
+      }
+      // Tenta também chamada escolar (justificativas)
+      let chamadaEscola = {};
+      try {
+        chamadaEscola = (await fbGet(PATH.chamadaEscolar(ANO_LETIVO, turma))) || {};
+      } catch (e) {}
+
+      const alunos = Object.values(cache.alunos || {})
+        .filter(a => a.turma === turma && a.status !== "Transferido" && a.homologado !== false)
+        .sort((a, b) => String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", { sensitivity: "base" }));
+
+      const datas = Object.keys(freqData).sort();
+      if (!datas.length && !Object.keys(chamadaEscola).length) {
+        thead.innerHTML = "<tr><th>Nº</th><th>Aluno</th><th colspan='3'>Nenhum lançamento neste filtro</th></tr>";
+        tb.innerHTML = "";
+        return;
+      }
+      // Mescla datas da chamada escolar
+      Object.keys(chamadaEscola).forEach(d => { if (!datas.includes(d)) datas.push(d); });
+      datas.sort();
+
+      thead.innerHTML = `<tr>
+        <th style="width:28px">Nº</th>
+        <th style="min-width:140px">Aluno</th>
+        ${datas.map(d => `<th title="${d}">${d.split("-").reverse().slice(0,2).join("/")}</th>`).join("")}
+        <th>Total F</th>
+      </tr>`;
+
+      tb.innerHTML = alunos.map((a, i) => {
+        let totalF = 0;
+        const cells = datas.map(d => {
+          let sit = (freqData[d] || {})[a.id];
+          // Justificativa da chamada escolar sobrescreve
+          const ce = (chamadaEscola[d] || {})[a.id];
+          if (ce === "J") sit = "J";
+          else if (ce === "F" && !sit) sit = "F";
+          else if (ce === "P" && !sit) sit = "P";
+          if (sit === "F") totalF++;
+          if (!sit || sit === ".") return '<td class="vazio">·</td>';
+          return `<td class="${sit}">${sit}</td>`;
+        }).join("");
+        return `<tr>
+          <td>${i + 1}</td>
+          <td class="nome">${a.nome}</td>
+          ${cells}
+          <td><strong>${totalF || ""}</strong></td>
+        </tr>`;
+      }).join("");
+      toast("Frequência carregada: " + alunos.length + " alunos · " + datas.length + " dias.", "sucesso");
+    }
+    function exportarFreq() {
+      const turma = document.getElementById("fe_turma").value;
+      const alunos = Object.values(cache.alunos || {})
+        .filter(a => a.turma === turma)
+        .sort((a, b) => String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR"));
+      const datas = Object.keys(freqData).sort();
+      const rows = [];
+      alunos.forEach(a => {
+        datas.forEach(d => {
+          const sit = (freqData[d] || {})[a.id];
+          if (sit) rows.push([d, a.nome, sit === "F" ? "Falta" : sit === "J" ? "Justificada" : "Presente"]);
+        });
+      });
+      exportarCSV("frequencia_escola.csv", ["Data", "Aluno", "Situação"], rows);
+    }
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>

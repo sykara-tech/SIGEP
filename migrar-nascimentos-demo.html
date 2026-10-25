@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SIGEP — Migração de datas de nascimento</title><link rel="stylesheet" href="style.css"></head>
+<body><div id="topo"></div><main class="conteudo"><div class="card">
+<div class="card-header"><h2>Migração de datas de nascimento</h2><a class="btn btn-secundario" href="sec-matriculas.html">Voltar às matrículas</a></div>
+<div class="sub-sec"><strong>Atenção:</strong> este utilitário gera datas fictícias aleatórias apenas para registros sem data. Use somente em banco de demonstração/teste. Não aplique datas inventadas a alunos reais ou a registros escolares oficiais.</div>
+<div style="padding:16px"><p id="resumo">Carregue os alunos para conferir quantos registros estão sem data de nascimento.</p>
+<button class="btn btn-secundario" onclick="carregar()">Verificar registros</button>
+<button class="btn btn-aviso" id="executar" onclick="preencher()" disabled>Preencher datas fictícias no Firebase</button>
+<pre id="log" style="white-space:pre-wrap;margin-top:16px"></pre></div></div></main><div id="toast" class="toast"></div>
+<script src="app.js"></script><script>
+let alunos = {};
+document.addEventListener("DOMContentLoaded", async () => {
+ const u = exigirLogin(["Secretaria","Gestor","Coordenacao"]); if (!u) return;
+ document.getElementById("topo").innerHTML = montarTopo("Migração de nascimento", "Secretaria Escolar");
+ document.getElementById("dataTopo").textContent = dataHoje();
+});
+async function carregar(){
+ mostrarCarregando("Consultando alunos...");
+ try {
+  alunos = (await fbGet(PATH.alunos)) || {};
+  const lista = Object.values(alunos);
+  const faltando = lista.filter(a => !a.dataNascimento && !a.nascimento);
+  document.getElementById("resumo").textContent = `Registros encontrados: ${lista.length}. Sem data de nascimento: ${faltando.length}.`;
+  document.getElementById("executar").disabled = !faltando.length;
+  document.getElementById("log").textContent = faltando.length ? "Nenhuma alteração foi feita. Confirme que este é um banco de demonstração antes de executar." : "Todos os registros já têm data de nascimento.";
+ } catch(e){ toast("Falha ao consultar Firebase: "+e.message,"erro"); }
+ ocultarCarregando();
+}
+function dataAleatoria(){
+ const hoje = new Date();
+ const anoMax = hoje.getFullYear()-5, anoMin = hoje.getFullYear()-19;
+ const ano = anoMin + Math.floor(Math.random()*(anoMax-anoMin+1));
+ const mes = 1 + Math.floor(Math.random()*12);
+ const diaMax = new Date(ano,mes,0).getDate();
+ const dia = 1 + Math.floor(Math.random()*diaMax);
+ return `${ano}-${String(mes).padStart(2,"0")}-${String(dia).padStart(2,"0")}`;
+}
+async function preencher(){
+ const faltando = Object.values(alunos).filter(a => !a.dataNascimento && !a.nascimento);
+ if(!faltando.length) return toast("Não há registros sem data.","info");
+ if(!confirm(`Você vai gravar datas FICTÍCIAS em ${faltando.length} registros do Firebase. Continue somente se este for um banco de teste/demonstração. Deseja continuar?`)) return;
+ mostrarCarregando("Gravando datas fictícias...");
+ let alterados = 0;
+ try{
+  for(const a of faltando){
+   a.dataNascimento = dataAleatoria();
+   const resposta = await fetch(`${DB_URL}/${PATH.alunos}/${encodeURIComponent(a.id)}.json`, {
+    method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(a)
+   });
+   if (!resposta.ok) throw new Error(`Falha ao gravar ${a.nome || a.id}: HTTP ${resposta.status}`);
+   alterados++;
+  }
+  document.getElementById("resumo").textContent = `Concluído: ${alterados} registros receberam datas fictícias.`;
+  document.getElementById("log").textContent = "As datas foram gravadas. Para registros reais, substitua-as pelas datas confirmadas nos documentos dos responsáveis.";
+  document.getElementById("executar").disabled = true;
+  toast("Migração concluída.","sucesso");
+ }catch(e){ toast("Erro durante a gravação: "+e.message,"erro"); }
+ ocultarCarregando();
+}
+</script></body></html>

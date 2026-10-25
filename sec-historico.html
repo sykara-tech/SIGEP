@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGEP — Histórico</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="topo"></div>
+  <nav class="nav-sec">
+    <a href="secretaria.html">Hub</a>
+    <a href="sec-turmas.html">Turmas</a>
+    <a href="sec-alunos.html">Alunos</a>
+    <a href="sec-professores.html">Professores</a>
+    <a href="sec-disciplinas.html">Disciplinas</a>
+    <a href="sec-vinculos.html">Vínculos</a>
+    <a href="sec-movimentacao.html">Movimentação</a>
+    <a href="sec-alvaras.html">Alvarás</a>
+    <a href="sec-antigas.html">Antigas</a>
+    <a href="sec-historico.html" class="ativa">Histórico</a>
+  </nav>
+  <main class="conteudo">
+
+<div class="card">
+  <div class="card-header"><h2>Histórico da Secretaria</h2>
+    <button class="btn btn-secundario" onclick="loadHist()">Atualizar</button></div>
+  <div style="padding:16px;overflow-x:auto;max-height:65vh"><table class="tabela-cad"><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Usuário</th></tr></thead><tbody id="tb"></tbody></table></div>
+</div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+  <script src="sec-common.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = exigirLogin(["Secretaria", "Gestor", "Coordenacao"]);
+      if (!u) return;
+      document.getElementById("topo").innerHTML = montarTopo("Histórico", "Secretaria · Ano 2026");
+      document.getElementById("dataTopo").textContent = dataHoje();
+      if (typeof aplicarNavSec === "function") aplicarNavSec("sec-historico.html");
+      if (typeof initPage === "function") initPage("historico");
+    });
+  </script>
+</body>
+</html>
